@@ -17,6 +17,19 @@ logger.info("")
 def now():
     return int(time.time() * 1000.0)
 
+class ValBuff:
+    def __init__(self, max_size = 10):
+        self.buffer = []
+        self.max_size = max_size
+
+    def add(self, value):
+        self.buffer.append(value)
+        if len(self.buffer) > self.max_size:
+            self.buffer = self.buffer[-self.max_size:]
+
+    def average(self):
+        return sum(self.buffer) / len(self.buffer) if len(self.buffer) > 0 else 0
+
 class PizRemote:
     pig = pigpio.pi()
 
@@ -108,16 +121,18 @@ class PizRemote:
                 logger.warning("Caught exception %s %s", err, type(err))
                 raise
 
+    safran = ValBuff(5)
+    moteur = ValBuff(3)
 
     def doLoop(self):
-        safran = self.readChannel(0)
-        moteur = self.readChannel(1)
+        self.safran.add(self.readChannel(0))
+        self.moteur.add(self.readChannel(1))
 
         tsMessageSent = now()
 
         self.pig.write(self.leds_pins[0], 0)
 
-        self.sock.send(bytes("{\"safran\":" + str(safran) + ", \"moteur\":" + str(moteur) + ", \"ts\":" + str(round(tsMessageSent)) + "}\n", 'utf8'))
+        self.sock.send(bytes("{\"safran\":" + str(self.safran.average()) + ", \"moteur\":" + str(self.moteur.average()) + ", \"ts\":" + str(round(tsMessageSent)) + "}\n", 'utf8'))
 
         self.nbPackets += 1
 
@@ -151,7 +166,7 @@ class PizRemote:
         if now() - self.lastUpdate > 1000:
             lag = tsMessageSent - tsMessageRecieved
             messageRate = self.nbPackets / self.age()
-            logger.info(f"Uptime={self.age()}, {safran=}, {moteur=}, {self.nbConnects=}, {messageRate=}, {lag=}, {timeSend=}, {linkQuality=} min={self.linkQualityMin} max={self.linkQualityMax}")
+            logger.info(f"Uptime={self.age()}, safran={self.safran.average()} moteur={self.moteur.average()}, {self.nbConnects=}, {messageRate=}, {lag=}, {timeSend=}, {linkQuality=} min={self.linkQualityMin} max={self.linkQualityMax}")
             self.lastUpdate = now()
 
     def updateLinkQuality(self, linkQuality):

@@ -17,18 +17,23 @@ logger.info("")
 def now():
     return int(time.time() * 1000.0)
 
-class ValBuff:
-    def __init__(self, max_size = 10):
-        self.buffer = []
+class CircBuffer:
+    def __init__(self, max_size=10):
+        self.buffer = [0] * max_size
+        self.size = 0
         self.max_size = max_size
+        self.index = 0
 
     def add(self, value):
-        self.buffer.append(value)
-        if len(self.buffer) > self.max_size:
-            self.buffer = self.buffer[-self.max_size:]
+        self.buffer[self.index] = value
+        self.index = (self.index + 1) % self.max_size
+        if self.size < self.max_size:
+            self.size += 1
 
     def average(self):
-        return sum(self.buffer) / len(self.buffer) if len(self.buffer) > 0 else 0
+        if self.size == 0:
+            return 0
+        return sum(self.buffer[:self.size]) / self.size
 
 class PizRemote:
     pig = pigpio.pi()
@@ -121,8 +126,8 @@ class PizRemote:
                 logger.warning("Caught exception %s %s", err, type(err))
                 raise
 
-    safran = ValBuff(5)
-    moteur = ValBuff(3)
+    safran = CircBuffer(5)
+    moteur = CircBuffer(3)
 
     def doLoop(self):
         self.safran.add(self.readChannel(0))

@@ -22,8 +22,9 @@ class PizBoat:
 	safran_mid=int((safran_min+safran_max)/2)
 
 	moteur_pin=25
-	moteur_min=1000
-	moteur_max=2200
+	moteur_min=1100
+	moteur_max=1900
+	moteur_mid=1400 #int((moteur_min+moteur_max)/2)
 
 	listen_address = '0.0.0.0'
 	listen_port = 10012	
@@ -64,7 +65,7 @@ class PizBoat:
 	def run(self):
 		while True:
 			# Reinit boat engine
-			self.pi.set_servo_pulsewidth(self.moteur_pin, self.moteur_min)
+			self.pi.set_servo_pulsewidth(self.moteur_pin, self.moteur_mid)
 			logger.info("Waiting connection..")
 			client, addr = self.sock.accept()
 			logger.info(f"client connected from {client}, {addr}")

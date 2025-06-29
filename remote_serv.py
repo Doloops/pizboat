@@ -1,9 +1,9 @@
+import logging
 import spidev
 import time
 import socket
 import select
 import json
-import logging
 import pigpio
 
 logger = logging.getLogger(__name__)

@@ -38,7 +38,8 @@ class CircBuffer:
 class PizRemote:
     pig = pigpio.pi()
 
-    leds_pins = [5, 6, 13, 19, 26]
+    # leds_pins = [5, 6, 13, 19, 26, 21, 20, 16]
+    leds_pins = [16, 20, 21, 26, 19, 13, 6, 5]
 
     spi = spidev.SpiDev()
     spi.open(0,0)
@@ -104,7 +105,7 @@ class PizRemote:
             cnt = 0
             while not self.isConnected:
                 for p in range(0, len(self.leds_pins)):
-                    self.pig.write(self.leds_pins[p], 1 if p == (cnt % 5) else 0)
+                    self.pig.write(self.leds_pins[p], 1 if p == (cnt % len(self.leds_pins)) else 0)
                 logger.info(f"Age {self.age()} Connecting attempt {cnt}...")
                 try:
                     self.connect()
@@ -130,8 +131,8 @@ class PizRemote:
     moteur = CircBuffer(3)
 
     def doLoop(self):
-        self.safran.add(self.readChannel(0))
-        self.moteur.add(self.readChannel(1))
+        self.safran.add(self.readChannel(1))
+        self.moteur.add(self.readChannel(7))
 
         tsMessageSent = now()
 
@@ -178,7 +179,7 @@ class PizRemote:
         self.linkQualityMin = min(self.linkQualityMin, linkQuality)
         self.linkQualityMax = max(self.linkQualityMax, linkQuality)
 
-        lv = (linkQuality - 30) * 5 / 40
+        lv = (linkQuality - 30) * 8 / 40
         for p in range(0, len(self.leds_pins)):
             self.pig.write(self.leds_pins[p], 1 if p < lv else 0)
 

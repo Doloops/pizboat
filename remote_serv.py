@@ -6,6 +6,10 @@ import select
 import json
 import pigpio
 
+from luma.oled.device import ssd1306
+from luma.core.interface.serial import i2c
+from luma.core.render import canvas
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(filename="/home/pi/remote.log", encoding="utf-8", level=logging.DEBUG)
 
@@ -38,7 +42,6 @@ class CircBuffer:
 class PizRemote:
     pig = pigpio.pi()
 
-    # leds_pins = [5, 6, 13, 19, 26, 21, 20, 16]
     leds_pins = [16, 20, 21, 26, 19, 13, 6, 5]
 
     spi = spidev.SpiDev()
@@ -51,6 +54,8 @@ class PizRemote:
 
     sock = socket.socket()
 
+    device = ssd1306(i2c(port=1, address=0x3C))
+
     def readChannel(self, channel):
         adc = self.spi.xfer2([1, (8 + channel) << 4, 0])
         data = ((adc[1] & 3) << 8) + adc[2]
@@ -59,6 +64,9 @@ class PizRemote:
     nbConnects = 0
 
     def __init__(self):
+        with canvas(self.device) as draw:
+            draw.rectangle(self.device.bounding_box, outline="white", fill="black")
+            draw.text((2, 2), "Init...", fill="white")
         for p in self.leds_pins:
             self.pig.set_mode(p, pigpio.OUTPUT)
         for p in self.leds_pins:
@@ -91,6 +99,8 @@ class PizRemote:
 
     lastUpdate = 0
 
+    lastScreenUpdate = 0
+
     tsBirth = now()
 
     isConnected = False
@@ -107,14 +117,23 @@ class PizRemote:
                 for p in range(0, len(self.leds_pins)):
                     self.pig.write(self.leds_pins[p], 1 if p == (cnt % len(self.leds_pins)) else 0)
                 logger.info(f"Age {self.age()} Connecting attempt {cnt}...")
+                with canvas(self.device) as draw:
+                    draw.rectangle(self.device.bounding_box, outline="white", fill="black")
+                    draw.text((2, 2), f"Connecting : attempt {cnt}...", fill="white")
+
                 try:
                     self.connect()
                     self.isConnected = True
                     logger.info("Connected !")
+                    with canvas(self.device) as draw:
+                        draw.rectangle(self.device.bounding_box, outline="white", fill="black")
+                        draw.text((2, 2), f"Connected !", fill="white")
+
                 except:
                     time.sleep(1)
                 cnt += 1
             self.pig.write(self.leds_pins[0], 1)
+
             try:
                 self.doLoop()
                 time.sleep(.04)
@@ -174,6 +193,14 @@ class PizRemote:
             messageRate = self.nbPackets / self.age()
             logger.info(f"Uptime={self.age()}, safran={self.safran.average()} moteur={self.moteur.average()}, {self.nbConnects=}, {messageRate=}, {lag=}, {timeSend=}, {linkQuality=} min={self.linkQualityMin} max={self.linkQualityMax}")
             self.lastUpdate = now()
+
+        if now() - self.lastScreenUpdate > 50:
+            self.lastScreenUpdate = now()
+            with canvas(self.device) as draw:
+                draw.rectangle(self.device.bounding_box, outline="black", fill="black")
+                draw.text((2, 2), f"Wifi " + str(linkQuality), fill="white")
+                draw.rectangle((0, self.device.height - 2, int(self.device.width * self.safran.average() / 65536), self.device.height), fill="white")
+                draw.rectangle((self.device.width - 2, self.device.height - int(self.device.height * self.moteur.average() / 65536), self.device.width, self.device.height), fill="white")
 
     def updateLinkQuality(self, linkQuality):
         self.linkQualityMin = min(self.linkQualityMin, linkQuality)

@@ -119,7 +119,7 @@ class PizRemote:
                 logger.info(f"Age {self.age()} Connecting attempt {cnt}...")
                 with canvas(self.device) as draw:
                     draw.rectangle(self.device.bounding_box, outline="white", fill="black")
-                    draw.text((2, 2), f"Connecting : attempt {cnt}...", fill="white")
+                    draw.text((2, 2), f"Connecting #{cnt}...", fill="white")
 
                 try:
                     self.connect()

@@ -5,13 +5,14 @@ import socket
 import select
 import json
 import pigpio
+import threading
 
 from luma.oled.device import ssd1306
 from luma.core.interface.serial import i2c
 from luma.core.render import canvas
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(filename="/home/pi/remote.log", encoding="utf-8", level=logging.DEBUG)
+logging.basicConfig(filename="/home/pi/remote.log", encoding="utf-8", level=logging.INFO)
 
 logger.info("*****************************")
 logger.info("* Starting PIZ Remote Now ! *")
@@ -39,10 +40,16 @@ class CircBuffer:
             return 0
         return sum(self.buffer[:self.size]) / self.size
 
+def __updateScreenLoop(__obj):
+    __obj.updateScreenLoop()
+
 class PizRemote:
     pig = pigpio.pi()
 
     leds_pins = [16, 20, 21, 26, 19, 13, 6, 5]
+
+    safran_channel = 1
+    moteur_channel = 7
 
     spi = spidev.SpiDev()
     spi.open(0,0)
@@ -55,6 +62,14 @@ class PizRemote:
     sock = socket.socket()
 
     device = ssd1306(i2c(port=1, address=0x3C))
+
+    class ScreenStats:
+        updateScreenThread = None
+        linkQuality = 0
+        safran_val = 0
+        moteur_val = 0
+
+    screenStats = ScreenStats()
 
     def readChannel(self, channel):
         adc = self.spi.xfer2([1, (8 + channel) << 4, 0])
@@ -76,6 +91,8 @@ class PizRemote:
         for p in self.leds_pins:
             self.pig.write(p, 0)
             time.sleep(.1)
+        self.screenStats.updateScreenThread = threading.Thread(target=self.updateScreenLoop, args=[])
+        self.screenStats.updateScreenThread.start()
 
     def age(self):
         return int((now() - self.tsBirth) / 1000)
@@ -110,7 +127,6 @@ class PizRemote:
 
 
     def run(self):
-
         while True:
             cnt = 0
             while not self.isConnected:
@@ -150,14 +166,19 @@ class PizRemote:
     moteur = CircBuffer(3)
 
     def doLoop(self):
-        self.safran.add(self.readChannel(1))
-        self.moteur.add(self.readChannel(7))
+        safran_raw = self.readChannel(self.safran_channel)
+        self.safran.add(safran_raw)
+        safran_val = safran_raw
+
+        moteur_raw = self.readChannel(self.moteur_channel)
+        self.moteur.add(moteur_raw)
+        moteur_val = moteur_raw
 
         tsMessageSent = now()
 
         self.pig.write(self.leds_pins[0], 0)
 
-        self.sock.send(bytes("{\"safran\":" + str(self.safran.average()) + ", \"moteur\":" + str(self.moteur.average()) + ", \"ts\":" + str(round(tsMessageSent)) + "}\n", 'utf8'))
+        self.sock.send(bytes("{\"safran\":" + str(safran_val) + ", \"moteur\":" + str(moteur_val) + ", \"ts\":" + str(round(tsMessageSent)) + "}\n", 'utf8'))
 
         self.nbPackets += 1
 
@@ -188,19 +209,34 @@ class PizRemote:
 
         self.updateLinkQuality(linkQuality)
 
+        self.screenStats.safran_val = safran_val
+        self.screenStats.moteur_val = moteur_val
+        self.screenStats.linkQuality = linkQuality
+
         if now() - self.lastUpdate > 1000:
             lag = tsMessageSent - tsMessageRecieved
             messageRate = self.nbPackets / self.age()
-            logger.info(f"Uptime={self.age()}, safran={self.safran.average()} moteur={self.moteur.average()}, {self.nbConnects=}, {messageRate=}, {lag=}, {timeSend=}, {linkQuality=} min={self.linkQualityMin} max={self.linkQualityMax}")
+            logger.info(f"Uptime={self.age()}, safran={safran_val} moteur={moteur_val}, {self.nbConnects=}, {messageRate=}, {lag=}, {timeSend=}, {linkQuality=} min={self.linkQualityMin} max={self.linkQualityMax}")
             self.lastUpdate = now()
 
-        if now() - self.lastScreenUpdate > 50:
-            self.lastScreenUpdate = now()
-            with canvas(self.device) as draw:
-                draw.rectangle(self.device.bounding_box, outline="black", fill="black")
-                draw.text((2, 2), f"Wifi " + str(linkQuality), fill="white")
-                draw.rectangle((0, self.device.height - 2, int(self.device.width * self.safran.average() / 65536), self.device.height), fill="white")
-                draw.rectangle((self.device.width - 2, self.device.height - int(self.device.height * self.moteur.average() / 65536), self.device.width, self.device.height), fill="white")
+    def updateScreenLoop(self):
+        while True:
+            if self.isConnected:
+                screenRefreshStart = now()
+                self.updateScreen()
+                logger.info(f"Took {now() - screenRefreshStart}ms to refresh screen")
+            time.sleep(.5)
+
+    def updateScreen(self):
+        linkQuality = self.screenStats.linkQuality
+        safran_val = self.screenStats.safran_val
+        moteur_val = self.screenStats.moteur_val
+
+        with canvas(self.device) as draw:
+            # draw.rectangle(self.device.bounding_box, outline="black", fill="black")
+            draw.text((2, 2), f"Wifi " + str(linkQuality), fill="white")
+            draw.rectangle((0, self.device.height - 2, int(self.device.width * safran_val / 65536), self.device.height), fill="white")
+            draw.rectangle((self.device.width - 2, self.device.height - int(self.device.height * moteur_val / 65536), self.device.width, self.device.height), fill="white")
 
     def updateLinkQuality(self, linkQuality):
         self.linkQualityMin = min(self.linkQualityMin, linkQuality)

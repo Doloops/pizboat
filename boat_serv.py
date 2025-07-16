@@ -13,6 +13,24 @@ logger.info("* Starting PIZ Boat Now ! *")
 logger.info("***************************")
 logger.info("")
 
+class CircBuffer:
+    def __init__(self, max_size=10):
+        self.buffer = [0] * max_size
+        self.size = 0
+        self.max_size = max_size
+        self.index = 0
+
+    def add(self, value):
+        self.buffer[self.index] = value
+        self.index = (self.index + 1) % self.max_size
+        if self.size < self.max_size:
+            self.size += 1
+
+    def average(self):
+        if self.size == 0:
+            return 0
+        return sum(self.buffer[:self.size]) / self.size
+
 class PizBoat:
 
 	pi = pigpio.pi()
@@ -28,7 +46,9 @@ class PizBoat:
 
 	listen_address = '0.0.0.0'
 	listen_port = 10012	
-	sock = socket.socket()
+	sock = socket.socket()	
+
+	moteur_avg = CircBuffer()
 
 	def __init__(self):
 		for p in self.safran_pins:
@@ -90,11 +110,14 @@ class PizBoat:
 
 				moteur_raw = json_data["moteur"]
 				moteur_val = int(self.moteur_min + ((moteur_raw / 65536) * (self.moteur_max - self.moteur_min)))
+                
+				self.moteur_avg.add(moteur_val)
+				moteur_val = self.moteur_avg.average()
 
 				ts=json_data["ts"]
 
 				# logger.info("safran_raw=" + str(safran_raw) + ", safran_val=" + str(safran_val) + ", moteur_raw=" + str(moteur_raw) + ", moteur_val=" + str(moteur_val))
-				logger.info(f"{safran_raw=} {safran_val=} {moteur_raw=} {moteur_val=}")
+				# logger.info(f"{safran_raw=} {safran_val=} {moteur_raw=} {moteur_val=}")
 
 				for p in self.safran_pins:
 					self.pi.set_servo_pulsewidth(p, safran_val)

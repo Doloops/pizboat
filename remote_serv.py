@@ -49,7 +49,10 @@ class PizRemote:
     leds_pins = [16, 20, 21, 26, 19, 13, 6, 5]
 
     safran_channel = 1
+    safran_trim_channel = 0
     moteur_channel = 7
+    
+    safran_trim = -8000
 
     spi = spidev.SpiDev()
     spi.open(0,0)
@@ -162,16 +165,14 @@ class PizRemote:
                 logger.warning("Caught exception %s %s", err, type(err))
                 raise
 
-    safran = CircBuffer(5)
-    moteur = CircBuffer(3)
-
     def doLoop(self):
+        safran_trim_raw = self.readChannel(self.safran_trim_channel)
+
         safran_raw = self.readChannel(self.safran_channel)
-        self.safran.add(safran_raw)
-        safran_val = safran_raw
+        
+        safran_val = safran_raw + (safran_trim_raw - (1 << 15))
 
         moteur_raw = self.readChannel(self.moteur_channel)
-        self.moteur.add(moteur_raw)
         moteur_val = moteur_raw
 
         tsMessageSent = now()
@@ -216,7 +217,7 @@ class PizRemote:
         if now() - self.lastUpdate > 1000:
             lag = tsMessageSent - tsMessageRecieved
             messageRate = self.nbPackets / self.age()
-            logger.info(f"Uptime={self.age()}, safran={safran_val} moteur={moteur_val}, {self.nbConnects=}, {messageRate=}, {lag=}, {timeSend=}, {linkQuality=} min={self.linkQualityMin} max={self.linkQualityMax}")
+            logger.info(f"Uptime={self.age()}, safran={safran_val} (trim={safran_trim_raw}) moteur={moteur_val}, {self.nbConnects=}, {messageRate=}, {lag=}, {timeSend=}, {linkQuality=} min={self.linkQualityMin} max={self.linkQualityMax}")
             self.lastUpdate = now()
 
     def updateScreenLoop(self):
@@ -235,7 +236,9 @@ class PizRemote:
         with canvas(self.device) as draw:
             # draw.rectangle(self.device.bounding_box, outline="black", fill="black")
             draw.text((2, 2), f"Wifi " + str(linkQuality), fill="white")
-            draw.rectangle((0, self.device.height - 2, int(self.device.width * safran_val / 65536), self.device.height), fill="white")
+            
+            wpos = int(self.device.width * safran_val / 65536)
+            draw.rectangle((wpos - 1, self.device.height - 2, wpos + 1, self.device.height), fill="white")
             draw.rectangle((self.device.width - 2, self.device.height - int(self.device.height * moteur_val / 65536), self.device.width, self.device.height), fill="white")
 
     def updateLinkQuality(self, linkQuality):

@@ -108,7 +108,7 @@ int main(int argc, char *argv[]) {
         val -= OFFSET;
         val /= SCALE;
         
-        usleep(10);
+        usleep(200000);
         nbframes ++;
     
         gettimeofday(&tv, NULL);

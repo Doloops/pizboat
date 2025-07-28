@@ -48,9 +48,12 @@ class PizRemote:
 
     leds_pins = [16, 20, 21, 26, 19, 13, 6, 5]
 
-    safran_channel = 1
-    safran_trim_channel = 0
-    moteur_channel = 7
+    ecoute_foc_channel = 1
+    ecoute_gv_channel = 2
+    ecoute_trim_channel = 3
+    safran_trim_channel = 4
+    safran_channel = 7
+    moteur_channel = 8
     
     safran_trim = -8000
 
@@ -166,20 +169,39 @@ class PizRemote:
                 raise
 
     def doLoop(self):
-        safran_trim_raw = self.readChannel(self.safran_trim_channel)
+        vals = [0] * 9
+        for i in range(8):
+            vals[i + 1] = self.readChannel(i)
+        # print(f"{vals=}")
 
-        safran_raw = self.readChannel(self.safran_channel)
-        
+        safran_trim_raw = vals[self.safran_trim_channel]
+        safran_raw = vals[self.safran_channel]
+        # safran_trim_raw = self.readChannel(self.safran_trim_channel)
+        # safran_raw = self.readChannel(self.safran_channel)
         safran_val = safran_raw + (safran_trim_raw - (1 << 15))
 
-        moteur_raw = self.readChannel(self.moteur_channel)
+        # moteur_raw = self.readChannel(self.moteur_channel)
+        moteur_raw = vals[self.moteur_channel]
         moteur_val = moteur_raw
+        
+        ecoute_gv_raw = vals[self.ecoute_gv_channel]
+        ecoute_foc_raw = vals[self.ecoute_foc_channel]
+        ecoute_trim_raw = vals[self.ecoute_trim_channel]
+        
+        ecoute_gv_val = ecoute_gv_raw
+        ecoute_foc_val = ecoute_foc_raw
+        ecoute_trim_val = ecoute_trim_raw
 
         tsMessageSent = now()
 
         self.pig.write(self.leds_pins[0], 0)
 
-        self.sock.send(bytes("{\"safran\":" + str(safran_val) + ", \"moteur\":" + str(moteur_val) + ", \"ts\":" + str(round(tsMessageSent)) + "}\n", 'utf8'))
+        self.sock.send(bytes("{\"safran\":" + str(safran_val) 
+            + ", \"moteur\":" + str(moteur_val)
+            + ", \"ecoute_gv\":" + str(ecoute_gv_val)
+            + ", \"ecoute_foc\":" + str(ecoute_foc_val)
+            + ", \"trim1\":" + str(ecoute_trim_val)
+            + ", \"ts\":" + str(round(tsMessageSent)) + "}\n", 'utf8'))
 
         self.nbPackets += 1
 
@@ -217,7 +239,10 @@ class PizRemote:
         if now() - self.lastUpdate > 1000:
             lag = tsMessageSent - tsMessageRecieved
             messageRate = self.nbPackets / self.age()
-            logger.info(f"Uptime={self.age()}, safran={safran_val} (trim={safran_trim_raw}) moteur={moteur_val}, {self.nbConnects=}, {messageRate=}, {lag=}, {timeSend=}, {linkQuality=} min={self.linkQualityMin} max={self.linkQualityMax}")
+            logger.info(f"""Uptime={self.age()}, {safran_raw=} {safran_val=} (trim={safran_trim_raw}) moteur={moteur_val}
+                {ecoute_gv_val=} {ecoute_foc_val=} {ecoute_trim_val=}
+                {self.nbConnects=}, {messageRate=}, {lag=}, {timeSend=}, 
+                {linkQuality=} min={self.linkQualityMin} max={self.linkQualityMax}""")
             self.lastUpdate = now()
 
     def updateScreenLoop(self):
@@ -225,7 +250,7 @@ class PizRemote:
             if self.isConnected:
                 screenRefreshStart = now()
                 self.updateScreen()
-                logger.info(f"Took {now() - screenRefreshStart}ms to refresh screen")
+                # logger.info(f"Took {now() - screenRefreshStart}ms to refresh screen")
             time.sleep(.5)
 
     def updateScreen(self):

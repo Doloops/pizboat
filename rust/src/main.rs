@@ -1,9 +1,11 @@
 use rppal::gpio::{Gpio, InputPin, Level};
+use rppal::spi::{Bus, Mode, SlaveSelect, Spi};
 use std::thread;
 use std::time::{Duration, Instant};
 
 const BUTTON_PINS: [u8; 6] = [12, 25, 24, 23, 18, 15];
 const DEBOUNCE_MS: u64 = 50; // Debounce time in milliseconds
+const ADC_CHANNELS: usize = 8; // MCP3008 has 8 channels
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Edge {
@@ -50,6 +52,53 @@ impl ButtonState {
     }
 }
 
+struct AdcReader {
+    spi: Spi,
+}
+
+impl AdcReader {
+    fn new() -> Result<Self, Box<dyn std::error::Error>> {
+        // Configure SPI for MCP3008
+        // Clock speed: 1 MHz (MCP3008 max is 3.6 MHz at 5V, 1.35 MHz at 2.7V)
+        let spi = Spi::new(Bus::Spi0, SlaveSelect::Ss0, 488_000, Mode::Mode0)?;
+        println!("MCP3008 ADC initialized on SPI0.0");
+        Ok(AdcReader { spi })
+    }
+
+    fn read_channel(&mut self, channel: u8) -> Result<u16, Box<dyn std::error::Error>> {
+        if channel >= 8 {
+            return Err("Channel must be 0-7".into());
+        }
+
+        // MCP3008 communication protocol
+        // Send 3 bytes: [start bit + single-ended, channel selection, don't care]
+        // Receive 3 bytes with 10-bit result
+        let tx_buffer = [
+            0x01,                           // Start bit
+            (0x08 | channel) << 4,          // Single-ended mode + channel
+            0x00,                           // Don't care
+        ];
+        let mut rx_buffer = [0u8; 3];
+
+        self.spi.transfer(&mut rx_buffer, &tx_buffer)?;
+        
+        let buffer = rx_buffer;
+
+        // Extract 10-bit value from response
+        // Result is in bits [9:0] of bytes [1:2]
+        let value = (((buffer[1] & 0x03) as u16) << 8) | (buffer[2] as u16);
+        Ok(value)
+    }
+
+    fn read_all_channels(&mut self) -> Result<[u16; ADC_CHANNELS], Box<dyn std::error::Error>> {
+        let mut values = [0u16; ADC_CHANNELS];
+        for channel in 0..ADC_CHANNELS {
+            values[channel] = self.read_channel(channel as u8)?;
+        }
+        Ok(values)
+    }
+}
+
 struct ButtonReader {
     pins: Vec<InputPin>,
     states: Vec<ButtonState>,
@@ -86,7 +135,6 @@ impl ButtonReader {
     }
 
     fn display_state(&self, states: &[Level], edges: &[Option<Edge>]) {
-        print!("\r");
         for (i, (&level, &edge)) in states.iter().zip(edges.iter()).enumerate() {
             let status = match level {
                 Level::High => "HIGH",
@@ -97,10 +145,9 @@ impl ButtonReader {
                 Some(Edge::Falling) => " v ",
                 None => "   ",
             };
-            print!("Btn{}: {}{} | ", i + 1, status, edge_info);
+            print!("{}: {}{} | ", i + 1, status, edge_info);
         }
         use std::io::{self, Write};
-        io::stdout().flush().unwrap();
     }
 
     fn log_events(&self, edges: &[Option<Edge>]) {
@@ -122,18 +169,39 @@ impl ButtonReader {
     }
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("Button Reader - Pins: {:?} - Debounce: {}ms\n", BUTTON_PINS, DEBOUNCE_MS);
+fn display_adc_values(values: &[u16; ADC_CHANNELS]) {
+    print!(" ADC: ");
+    for (i, &value) in values.iter().enumerate() {
+        let voltage = (value as f32 / 1023.0) * 3.3; // Assuming 3.3V reference
+        print!("CH{}: {:4} ({:.2}V) | ", i, value, voltage);
+    }
+    use std::io::{self, Write};
+    io::stdout().flush().unwrap();
+}
 
-    let mut reader = ButtonReader::new(&BUTTON_PINS)?;
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    println!("Button and ADC Reader - Buttons: {:?} - Debounce: {}ms\n", BUTTON_PINS, DEBOUNCE_MS);
+
+    let mut button_reader = ButtonReader::new(&BUTTON_PINS)?;
+    let mut adc_reader = AdcReader::new()?;
 
     loop {
-        let edges = reader.read_and_detect_edges();
-        let states = reader.get_current_states();
+        let edges = button_reader.read_and_detect_edges();
+        let button_states = button_reader.get_current_states();
         
-        reader.display_state(&states, &edges);
-        reader.log_events(&edges);
+        // io::stdout().flush().unwrap();
+
+        print!("\r");
         
-        thread::sleep(Duration::from_millis(10));
+        // button_reader.display_state(&button_states, &edges);
+        button_reader.log_events(&edges);
+
+        // Read ADC values
+        match adc_reader.read_all_channels() {
+            Ok(adc_values) => display_adc_values(&adc_values),
+            Err(e) => print!(" ADC Error: {} ", e),
+        }
+        
+        thread::sleep(Duration::from_millis(100)); // 100ms refresh rate
     }
 }

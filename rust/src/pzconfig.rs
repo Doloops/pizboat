@@ -48,3 +48,84 @@ impl ChannelConfig {
         }
     }
 }
+
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum SettingsParameter {
+    RudderDeadzone,
+    RudderMin,
+    RudderMax,
+    RudderCenter,
+    MotorDeadzone,
+    MotorMin,
+    MotorMax,
+    MotorCenter,
+}
+
+impl SettingsParameter {
+    pub fn next(&self) -> Self {
+        match self {
+            Self::RudderDeadzone => Self::RudderMin,
+            Self::RudderMin => Self::RudderMax,
+            Self::RudderMax => Self::RudderCenter,
+            Self::RudderCenter => Self::MotorDeadzone,
+            Self::MotorDeadzone => Self::MotorMin,
+            Self::MotorMin => Self::MotorMax,
+            Self::MotorMax => Self::MotorCenter,
+            Self::MotorCenter => Self::RudderDeadzone,
+        }
+    }
+
+    pub fn prev(&self) -> Self {
+        match self {
+            Self::RudderDeadzone => Self::MotorCenter,
+            Self::RudderMin => Self::RudderDeadzone,
+            Self::RudderMax => Self::RudderMin,
+            Self::RudderCenter => Self::RudderMax,
+            Self::MotorDeadzone => Self::RudderCenter,
+            Self::MotorMin => Self::MotorDeadzone,
+            Self::MotorMax => Self::MotorMin,
+            Self::MotorCenter => Self::MotorMax,
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        match self {
+            Self::RudderDeadzone => "RUD DZ",
+            Self::RudderMin => "RUD MIN",
+            Self::RudderMax => "RUD MAX",
+            Self::RudderCenter => "RUD CTR",
+            Self::MotorDeadzone => "MOT DZ",
+            Self::MotorMin => "MOT MIN",
+            Self::MotorMax => "MOT MAX",
+            Self::MotorCenter => "MOT CTR",
+        }
+    }
+
+    pub fn get_value(&self, rudder_cfg: &ChannelConfig, motor_cfg: &ChannelConfig) -> u16 {
+        match self {
+            Self::RudderDeadzone => rudder_cfg.deadzone,
+            Self::RudderMin => rudder_cfg.min,
+            Self::RudderMax => rudder_cfg.max,
+            Self::RudderCenter => rudder_cfg.center,
+            Self::MotorDeadzone => motor_cfg.deadzone,
+            Self::MotorMin => motor_cfg.min,
+            Self::MotorMax => motor_cfg.max,
+            Self::MotorCenter => motor_cfg.center,
+        }
+    }
+
+    pub fn set_value(&self, rudder_cfg: &mut ChannelConfig, motor_cfg: &mut ChannelConfig, value: u16) {
+        match self {
+            Self::RudderDeadzone => rudder_cfg.deadzone = value,
+            Self::RudderMin => rudder_cfg.min = value,
+            Self::RudderMax => rudder_cfg.max = value,
+            Self::RudderCenter => rudder_cfg.center = value,
+            Self::MotorDeadzone => motor_cfg.deadzone = value,
+            Self::MotorMin => motor_cfg.min = value,
+            Self::MotorMax => motor_cfg.max = value,
+            Self::MotorCenter => motor_cfg.center = value,
+        }
+    }
+}
+

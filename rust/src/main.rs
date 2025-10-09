@@ -2,80 +2,31 @@ mod display;
 mod pzconfig;
 mod adc;
 mod buttons;
+mod websocket;
 
+use websocket::websocket_thread;
 use pzconfig::{ChannelConfig, SettingsParameter};
 use display::{DisplayData, display_thread};
 use adc::AdcReader;
 use buttons::{ButtonReader, Edge};
 
 use rppal::gpio::{Level};
-use std::thread;
-use std::time::{Duration};
 use std::sync::mpsc::{self, SyncSender, Receiver};
 use std::sync::{Arc, Mutex};
-use std::net::TcpListener;
-use tungstenite::{accept, Message};
+use std::thread;
+use std::time::Duration;
 
 const BUTTON_PINS: [u8; 6] = [12, 25, 24, 23, 18, 15];
 const DEBOUNCE_MS: u64 = 50;
 const LONG_PRESS_MS: u64 = 1000; // 1 second for long press
 const ADC_CHANNELS: usize = 8;
 const DISPLAY_CHANNELS: [usize; 5] = [0, 1, 2, 6, 7];
+const BUTTON_CHANGE_MODE: usize = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum ControlMode {
     Normal,
     Settings,
-}
-
-
-fn websocket_thread(data_mutex: Arc<Mutex<Option<DisplayData>>>) {
-    let server = TcpListener::bind("0.0.0.0:10013").expect("Failed to bind WebSocket server");
-    println!("WebSocket server listening on port 10013");
-
-    for stream in server.incoming() {
-        let stream = match stream {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("Connection error: {}", e);
-                continue;
-            }
-        };
-
-        let data_mutex = Arc::clone(&data_mutex);
-        thread::spawn(move || {
-            let mut websocket = match accept(stream) {
-                Ok(ws) => ws,
-                Err(e) => {
-                    eprintln!("WebSocket handshake error: {}", e);
-                    return;
-                }
-            };
-
-            println!("New WebSocket client connected");
-
-            loop {
-                let data = {
-                    let locked_data = data_mutex.lock().unwrap();
-                    locked_data.clone()
-                };
-
-                if let Some(d) = data {
-                    match serde_json::to_string(&d) {
-                        Ok(json) => {
-                            if websocket.send(Message::Text(json)).is_err() {
-                                println!("WebSocket client disconnected");
-                                break;
-                            }
-                        }
-                        Err(e) => eprintln!("JSON serialization error: {}", e),
-                    }
-                }
-
-                thread::sleep(Duration::from_millis(40));
-            }
-        });
-    }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -112,7 +63,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let button_states = button_reader.get_current_states();
         
         // Check for long press on B2 to toggle mode
-        if button_reader.is_button_long_press(2) && !mode_just_changed {
+        if button_reader.is_button_long_press(BUTTON_CHANGE_MODE) && !mode_just_changed {
             mode = match mode {
                 ControlMode::Normal => {
                     println!("[MODE] Entering Settings mode");
@@ -128,7 +79,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
             last_event = String::from("MODE");
             mode_just_changed = true;
-        } else if !button_reader.is_button_long_press(3) {
+        } else if !button_reader.is_button_long_press(BUTTON_CHANGE_MODE) {
             mode_just_changed = false;
         }
         

@@ -1,11 +1,12 @@
 use std::sync::{Arc, Mutex};
-use crate::display::DisplayData;
 use std::net::TcpListener;
 use tungstenite::{accept, Message};
 use std::thread;
 use std::time::{Duration};
 
-pub fn websocket_thread(data_mutex: Arc<Mutex<Option<DisplayData>>>) {
+use crate::state::InternalState;
+
+pub fn websocket_thread(data_mutex: Arc<Mutex<Option<InternalState>>>) {
     let server = TcpListener::bind("0.0.0.0:10013").expect("Failed to bind WebSocket server");
     println!("WebSocket server listening on port 10013");
 

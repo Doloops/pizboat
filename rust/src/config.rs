@@ -1,16 +1,18 @@
 use serde::{Serialize, Deserialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ChannelConfig {
+    pub name: String,
     pub deadzone: u16,    // Deadzone around center (512)
     pub min: u16,         // Minimum output value
     pub max: u16,         // Maximum output value
     pub center: u16,      // Center output value
 }
 
-impl Default for ChannelConfig {
-    fn default() -> Self {
+impl ChannelConfig {
+    fn new(_name: &'static str) -> Self {
         ChannelConfig {
+            name: String::from(_name),
             deadzone: 50,
             min: 1000,
             max: 2000,
@@ -48,6 +50,98 @@ impl ChannelConfig {
         }
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Settings {
+    pub channels: Vec<ChannelConfig>,
+    currentChannel: usize,
+    pub currentValue: SettingsValue
+}
+
+impl Settings {
+    pub fn new() -> Self {
+        let mut channels = Vec::new();
+        channels.push(ChannelConfig::new("Rudder"));
+        channels.push(ChannelConfig::new("Motor"));
+        
+        Settings{channels: channels, currentChannel: 0, currentValue: SettingsValue::Deadzone}
+    }
+    
+    pub fn firstChannel(&mut self) {
+        self.currentChannel = 0;
+        self.currentValue = SettingsValue::Deadzone;
+    }
+    
+    pub fn previousChannel(&mut self) {
+        self.currentChannel = if self.currentChannel == 0 { self.channels.len()-1 } else { self.currentChannel - 1};
+    }
+    
+    pub fn nextChannel(&mut self) {
+        self.currentChannel = if self.currentChannel == self.channels.len()-1 { 0 } else { self.currentChannel + 1};
+    }
+
+    fn currentChannel(&self) -> &ChannelConfig {
+        &(self.channels[self.currentChannel])
+    }
+
+    fn mutCurrentChannel(&mut self) -> &mut ChannelConfig {
+        &mut(self.channels[self.currentChannel])
+    }
+    
+    pub fn currentChannelName(&self) -> String {
+        self.channels[self.currentChannel].name.clone()
+    }
+    
+    pub fn previousValue(&mut self) {
+        self.currentValue = match self.currentValue {
+            SettingsValue::Deadzone => SettingsValue::Max,
+            SettingsValue::Min => SettingsValue::Deadzone,
+            SettingsValue::Max => SettingsValue::Min
+        }
+    }
+    
+    pub fn nextValue(&mut self) {
+        self.currentValue = match self.currentValue {
+            SettingsValue::Deadzone => SettingsValue::Min,
+            SettingsValue::Min => SettingsValue::Max,
+            SettingsValue::Max => SettingsValue::Deadzone
+        }
+    }
+    
+    pub fn getValue(&self) -> u16 {
+        match self.currentValue {
+        SettingsValue::Deadzone => self.currentChannel().deadzone,
+        SettingsValue::Min => self.currentChannel().min,
+        SettingsValue::Max => self.currentChannel().max,
+        }
+    }
+    
+    pub fn addValue(&mut self, diff: u16) {
+        match self.currentValue {
+        SettingsValue::Deadzone => { self.mutCurrentChannel().deadzone += diff; }
+        SettingsValue::Min => { self.mutCurrentChannel().min += diff; }
+        SettingsValue::Max => { self.mutCurrentChannel().max += diff; }
+        }
+    }
+
+    pub fn subValue(&mut self, diff: u16) {
+        match self.currentValue {
+        SettingsValue::Deadzone => { self.mutCurrentChannel().deadzone -= diff; }
+        SettingsValue::Min => { self.mutCurrentChannel().min -= diff; }
+        SettingsValue::Max => { self.mutCurrentChannel().max -= diff; }
+        }
+    }
+    
+}
+    
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum SettingsValue {
+    Deadzone,
+    Min,
+    Max
+}
+
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]

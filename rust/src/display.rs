@@ -1,23 +1,23 @@
-use crate::pzconfig::ChannelConfig;
 use serde::{Serialize, Deserialize};
 use rppal::i2c::I2c;
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
-use std::time::{Duration};
+use std::time::Duration;
+
+use crate::state::ControlMode;
+use crate::config::Settings;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct DisplayData {
+    pub mode: ControlMode,
+    pub settings: Settings,
+    /*
     pub adc_values: [u16; crate::ADC_CHANNELS],
     pub button_states: [bool; 6],
-    pub buttons_sent: [bool; 4], // B0, B1, B3, B4 in normal mode
     pub rudder_value: u16,       // Transformed rudder value (ADC channel 0)
     pub motor_value: u16,        // Transformed motor value (ADC channel 1)
     pub mode: String,
-    pub rudder_config: ChannelConfig,
-    pub motor_config: ChannelConfig,
-    pub current_parameter: Option<String>,
-    pub current_value: Option<u16>,
-    pub last_event: String,
+    */
 }
 
 
@@ -63,7 +63,7 @@ impl DisplayBuffer {
     }
 
     fn draw_text(&mut self, x: u8, y: u8, text: &str) {
-        for (i, c) in text.chars().enumerate() {
+        for (i, c) in text.to_uppercase().chars().enumerate() {
             self.draw_char(x + (i as u8 * 6), y, c);
         }
     }
@@ -139,20 +139,27 @@ fn get_font_data(c: char) -> [u8; 5] {
         'C' => [0x3E, 0x41, 0x41, 0x41, 0x22],
         'D' => [0x7F, 0x41, 0x41, 0x41, 0x3E],
         'E' => [0x7F, 0x49, 0x49, 0x49, 0x41],
+        'F' => [0x7F, 0x09, 0x09, 0x09, 0x01],
+        'G' => [0x3E, 0x41, 0x49, 0x49, 0x3A],
+        'H' => [0x7F, 0x04, 0x04, 0x04, 0x7F],
+        'I' => [0x00, 0x41, 0x7F, 0x41, 0x00],
+        'J' => [0x41, 0x41, 0x3F, 0x01, 0x01],
+        'K' => [0x7F, 0x08, 0x14, 0x22, 0x41],
         'L' => [0x7F, 0x40, 0x40, 0x40, 0x40],
         'M' => [0x7F, 0x02, 0x0C, 0x02, 0x7F],
         'N' => [0x7F, 0x02, 0x04, 0x08, 0x7F],
         'O' => [0x3E, 0x41, 0x41, 0x41, 0x3E],
         'P' => [0x7F, 0x09, 0x09, 0x09, 0x06],
+        'Q' => [0x3E, 0x41, 0x51, 0x61, 0x7E],
         'R' => [0x7F, 0x09, 0x19, 0x29, 0x46],
         'S' => [0x26, 0x49, 0x49, 0x49, 0x32],
         'T' => [0x01, 0x01, 0x7F, 0x01, 0x01],
         'U' => [0x3F, 0x40, 0x40, 0x40, 0x3F],
-        'V' => [0x03, 0x04, 0x78, 0x04, 0x03],
+        'V' => [0x07, 0x18, 0x60, 0x18, 0x07],
+        'W' => [0x03, 0x04, 0x78, 0x04, 0x03],        
         'X' => [0x63, 0x14, 0x08, 0x14, 0x63],
-        'K' => [0x7F, 0x08, 0x14, 0x22, 0x41],
-        'G' => [0x3E, 0x41, 0x49, 0x49, 0x3A],
-        'I' => [0x00, 0x41, 0x7F, 0x41, 0x00],
+        'Y' => [0x03, 0x0C, 0x70, 0x0C, 0x03],
+        'Z' => [0x61, 0x51, 0x49, 0x45, 0x43],
         ':' => [0x00, 0x36, 0x36, 0x00, 0x00],
         ' ' => [0x00, 0x00, 0x00, 0x00, 0x00],
         '-' => [0x08, 0x08, 0x08, 0x08, 0x08],
@@ -187,8 +194,29 @@ pub fn display_thread(rx: Receiver<DisplayData>) {
             display_buffer.clear();
             
             // Display mode on top
-            display_buffer.draw_text(0, 0, &data.mode);
+            let mode = format!("Mode: {:?}", data.mode);
+            display_buffer.draw_text(0, 0, &mode);
+
+            match data.mode {
+                ControlMode::Normal => {
+                }
+                ControlMode::Settings => {
+                    let settings = format!("Channel: {}", data.settings.currentChannelName());
+                    display_buffer.draw_text(0, 12, &settings);
+                }
+                ControlMode::SettingsValue => {
+                    let settings = format!("Channel: {}", data.settings.currentChannelName());
+                    display_buffer.draw_text(0, 12, &settings);
+
+                    let valueName = format!("Settings: {:?}", data.settings.currentValue);
+                    display_buffer.draw_text(0, 24, &valueName);
+                    
+                    let value = format!("Value: {}", data.settings.getValue());
+                    display_buffer.draw_text(0, 36, &value);
+                }
+            }
             
+            /*
             if data.mode == "SETTINGS" {
                 // Settings mode display
                 if let (Some(param), Some(val)) = (&data.current_parameter, data.current_value) {
@@ -215,10 +243,12 @@ pub fn display_thread(rx: Receiver<DisplayData>) {
                     display_buffer.draw_text(0, y, &text);
                 }
             }
-
+            */
+            
             if let Err(e) = display.display(&display_buffer) {
                 eprintln!("Display error: {}", e);
             }
+            
         }
     }
 }

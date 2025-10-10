@@ -4,12 +4,11 @@ use std::sync::mpsc::{self, Receiver};
 use std::thread;
 use std::time::Duration;
 
-use crate::state::ControlMode;
+use crate::config::ControlMode;
 use crate::config::Settings;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct DisplayData {
-    pub mode: ControlMode,
     pub settings: Settings,
     /*
     pub adc_values: [u16; crate::ADC_CHANNELS],
@@ -194,10 +193,10 @@ pub fn display_thread(rx: Receiver<DisplayData>) {
             display_buffer.clear();
             
             // Display mode on top
-            let mode = format!("Mode: {:?}", data.mode);
+            let mode = format!("Mode: {:?}", data.settings.mode);
             display_buffer.draw_text(0, 0, &mode);
 
-            match data.mode {
+            match data.settings.mode {
                 ControlMode::Normal => {
                 }
                 ControlMode::Settings => {

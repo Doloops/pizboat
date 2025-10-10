@@ -1,5 +1,12 @@
 use serde::{Serialize, Deserialize};
 
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum ControlMode {
+    Normal,
+    Settings,
+    SettingsValue
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ChannelConfig {
     pub name: String,
@@ -51,8 +58,20 @@ impl ChannelConfig {
     }
 }
 
+
+
+const BUTTON_CANCEL_MODE: usize = 0;
+const BUTTON_UP: usize = 1;
+const BUTTON_CHANGE_MODE: usize = 2;
+const BUTTON_LEFT: usize = 3;
+const BUTTON_DOWN: usize = 4;
+const BUTTON_RIGHT: usize = 5;
+
+
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Settings {
+    pub mode: ControlMode,
     pub channels: Vec<ChannelConfig>,
     currentChannel: usize,
     pub currentValue: SettingsValue
@@ -64,7 +83,7 @@ impl Settings {
         channels.push(ChannelConfig::new("Rudder"));
         channels.push(ChannelConfig::new("Motor"));
         
-        Settings{channels: channels, currentChannel: 0, currentValue: SettingsValue::Deadzone}
+        Settings{mode: ControlMode::Normal, channels: channels, currentChannel: 0, currentValue: SettingsValue::Deadzone}
     }
     
     pub fn firstChannel(&mut self) {
@@ -132,6 +151,84 @@ impl Settings {
         }
     }
     
+    pub fn handle_button(&mut self, button: usize) {
+        match button {
+            BUTTON_CHANGE_MODE => {
+                let previous_mode = self.mode;
+                self.mode = match self.mode {
+                    ControlMode::Normal => {
+                        self.firstChannel();
+                        ControlMode::Settings
+                    }
+                    ControlMode::Settings => {
+                        ControlMode::SettingsValue
+                    }
+                    ControlMode::SettingsValue => {
+                        ControlMode::Settings
+                    }
+                };
+                println!("[Changed mode {:?} => {:?}", previous_mode, self.mode);
+            }
+            BUTTON_CANCEL_MODE => {
+                let previous_mode = self.mode;
+                self.mode = match self.mode {
+                    ControlMode::Normal => {
+                        ControlMode::Normal
+                    }
+                    ControlMode::Settings => {
+                        ControlMode::Normal
+                    }
+                    ControlMode::SettingsValue => {
+                        ControlMode::Settings
+                    }
+                };
+                println!("[Changed mode {:?} => {:?}", previous_mode, self.mode);
+            }
+            BUTTON_LEFT => {
+                match self.mode {
+                    ControlMode::Normal => {
+                    }
+                    ControlMode::Settings => {
+                        self.previousChannel();
+                    }
+                    ControlMode::SettingsValue => {
+                        self.previousValue();
+                    }
+                }
+            }
+            BUTTON_RIGHT => {
+                match self.mode {
+                    ControlMode::Normal => {
+                    }
+                    ControlMode::Settings => {
+                        self.nextChannel();
+                    }
+                    ControlMode::SettingsValue => {
+                        self.nextValue();
+                    }
+                }
+            }
+            BUTTON_UP => {
+                match self.mode {
+                    ControlMode::SettingsValue => {
+                        self.addValue(10);
+                    }
+                    _ => {}
+                }
+            }
+            BUTTON_DOWN => {
+                match self.mode {
+                    ControlMode::SettingsValue => {
+                        self.subValue(10);
+                    }
+                    _ => {}
+                }
+            }
+            _ => {}
+        };        
+        
+    }
+    
 }
     
 
@@ -141,85 +238,3 @@ pub enum SettingsValue {
     Min,
     Max
 }
-
-
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum SettingsParameter {
-    RudderDeadzone,
-    RudderMin,
-    RudderMax,
-    RudderCenter,
-    MotorDeadzone,
-    MotorMin,
-    MotorMax,
-    MotorCenter,
-}
-
-impl SettingsParameter {
-    pub fn next(&self) -> Self {
-        match self {
-            Self::RudderDeadzone => Self::RudderMin,
-            Self::RudderMin => Self::RudderMax,
-            Self::RudderMax => Self::RudderCenter,
-            Self::RudderCenter => Self::MotorDeadzone,
-            Self::MotorDeadzone => Self::MotorMin,
-            Self::MotorMin => Self::MotorMax,
-            Self::MotorMax => Self::MotorCenter,
-            Self::MotorCenter => Self::RudderDeadzone,
-        }
-    }
-
-    pub fn prev(&self) -> Self {
-        match self {
-            Self::RudderDeadzone => Self::MotorCenter,
-            Self::RudderMin => Self::RudderDeadzone,
-            Self::RudderMax => Self::RudderMin,
-            Self::RudderCenter => Self::RudderMax,
-            Self::MotorDeadzone => Self::RudderCenter,
-            Self::MotorMin => Self::MotorDeadzone,
-            Self::MotorMax => Self::MotorMin,
-            Self::MotorCenter => Self::MotorMax,
-        }
-    }
-
-    pub fn name(&self) -> &str {
-        match self {
-            Self::RudderDeadzone => "RUD DZ",
-            Self::RudderMin => "RUD MIN",
-            Self::RudderMax => "RUD MAX",
-            Self::RudderCenter => "RUD CTR",
-            Self::MotorDeadzone => "MOT DZ",
-            Self::MotorMin => "MOT MIN",
-            Self::MotorMax => "MOT MAX",
-            Self::MotorCenter => "MOT CTR",
-        }
-    }
-
-    pub fn get_value(&self, rudder_cfg: &ChannelConfig, motor_cfg: &ChannelConfig) -> u16 {
-        match self {
-            Self::RudderDeadzone => rudder_cfg.deadzone,
-            Self::RudderMin => rudder_cfg.min,
-            Self::RudderMax => rudder_cfg.max,
-            Self::RudderCenter => rudder_cfg.center,
-            Self::MotorDeadzone => motor_cfg.deadzone,
-            Self::MotorMin => motor_cfg.min,
-            Self::MotorMax => motor_cfg.max,
-            Self::MotorCenter => motor_cfg.center,
-        }
-    }
-
-    pub fn set_value(&self, rudder_cfg: &mut ChannelConfig, motor_cfg: &mut ChannelConfig, value: u16) {
-        match self {
-            Self::RudderDeadzone => rudder_cfg.deadzone = value,
-            Self::RudderMin => rudder_cfg.min = value,
-            Self::RudderMax => rudder_cfg.max = value,
-            Self::RudderCenter => rudder_cfg.center = value,
-            Self::MotorDeadzone => motor_cfg.deadzone = value,
-            Self::MotorMin => motor_cfg.min = value,
-            Self::MotorMax => motor_cfg.max = value,
-            Self::MotorCenter => motor_cfg.center = value,
-        }
-    }
-}
-

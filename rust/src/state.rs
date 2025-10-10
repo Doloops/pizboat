@@ -2,13 +2,6 @@ use serde::{Serialize, Deserialize};
 
 // use crate::config::ChannelConfig;
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub enum ControlMode {
-    Normal,
-    Settings,
-    SettingsValue
-}
-
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InternalState {
     pub adc_values: [u16; crate::ADC_CHANNELS],

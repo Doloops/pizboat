@@ -10,11 +10,11 @@ use crate::config::Settings;
 #[derive(Clone, Serialize, Deserialize)]
 pub struct DisplayData {
     pub settings: Settings,
+    pub rudder_value: u16,       // Transformed rudder value (ADC channel 0)
+    pub motor_value: u16,        // Transformed motor value (ADC channel 1)
     /*
     pub adc_values: [u16; crate::ADC_CHANNELS],
     pub button_states: [bool; 6],
-    pub rudder_value: u16,       // Transformed rudder value (ADC channel 0)
-    pub motor_value: u16,        // Transformed motor value (ADC channel 1)
     pub mode: String,
     */
 }
@@ -198,19 +198,26 @@ pub fn display_thread(rx: Receiver<DisplayData>) {
 
             match data.settings.mode {
                 ControlMode::Normal => {
+                    // Normal mode display
+                    let rudder_text = format!("RUD:{}", data.rudder_value);
+                    display_buffer.draw_text(0, 10, &rudder_text);
+                    
+                    let motor_text = format!("MOT:{}", data.motor_value);
+                    display_buffer.draw_text(64, 10, &motor_text);
+
                 }
                 ControlMode::Settings => {
-                    let settings = format!("Channel: {}", data.settings.currentChannelName());
+                    let settings = format!("Channel: {}", data.settings.current_channel_name());
                     display_buffer.draw_text(0, 12, &settings);
                 }
                 ControlMode::SettingsValue => {
-                    let settings = format!("Channel: {}", data.settings.currentChannelName());
+                    let settings = format!("Channel: {}", data.settings.current_channel_name());
                     display_buffer.draw_text(0, 12, &settings);
 
-                    let valueName = format!("Settings: {:?}", data.settings.currentValue);
-                    display_buffer.draw_text(0, 24, &valueName);
+                    let value_name = format!("Settings: {:?}", data.settings.current_value);
+                    display_buffer.draw_text(0, 24, &value_name);
                     
-                    let value = format!("Value: {}", data.settings.getValue());
+                    let value = format!("Value: {}", data.settings.get_value());
                     display_buffer.draw_text(0, 36, &value);
                 }
             }
@@ -228,12 +235,6 @@ pub fn display_thread(rx: Receiver<DisplayData>) {
                     display_buffer.draw_text(0, 50, "B0:X B2:OK");
                 }
             } else {
-                // Normal mode display
-                let rudder_text = format!("RUD:{}", data.rudder_value);
-                display_buffer.draw_text(0, 10, &rudder_text);
-                
-                let motor_text = format!("MOT:{}", data.motor_value);
-                display_buffer.draw_text(0, 20, &motor_text);
                 
                 // Display selected ADC channels
                 for (line, &channel) in crate::DISPLAY_CHANNELS.iter().take(3).enumerate() {

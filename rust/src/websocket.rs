@@ -1,12 +1,20 @@
+use serde::{Serialize, Deserialize};
 use std::sync::{Arc, Mutex};
 use std::net::TcpListener;
 use tungstenite::{accept, Message};
 use std::thread;
 use std::time::{Duration};
 
-use crate::state::InternalState;
+#[derive(Clone, Copy, Serialize, Deserialize)]
+pub struct CommandMessage {
+    pub rudder: u16,
+    pub motor: u16,
+    pub sail: u16,
+    pub genoa: u16
+}
 
-pub fn websocket_thread(data_mutex: Arc<Mutex<Option<InternalState>>>) {
+
+pub fn websocket_thread(data_mutex: Arc<Mutex<Option<CommandMessage>>>) {
     let server = TcpListener::bind("0.0.0.0:10013").expect("Failed to bind WebSocket server");
     println!("WebSocket server listening on port 10013");
 

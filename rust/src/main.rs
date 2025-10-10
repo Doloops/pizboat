@@ -3,10 +3,8 @@ mod config;
 mod adc;
 mod buttons;
 mod websocket;
-mod state;
 
-use state::InternalState;
-use websocket::websocket_thread;
+use websocket::{websocket_thread, CommandMessage};
 use config::{Settings};
 use display::{DisplayData, display_thread};
 use adc::AdcReader;
@@ -18,10 +16,9 @@ use std::thread;
 use std::time::Duration;
 
 const BUTTON_PINS: [u8; 6] = [12, 25, 24, 23, 18, 15];
-const DEBOUNCE_MS: u64 = 50;
-const LONG_PRESS_MS: u64 = 1000; // 1 second for long press
+
 const ADC_CHANNELS: usize = 8;
-const DISPLAY_CHANNELS: [usize; 5] = [0, 1, 2, 6, 7];
+// const DISPLAY_CHANNELS: [usize; 5] = [0, 1, 2, 6, 7];
 
 
 
@@ -44,11 +41,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut adc_reader = AdcReader::new()?;
 
     let (tx_display, rx_display): (SyncSender<DisplayData>, Receiver<DisplayData>) = mpsc::sync_channel(1);
-    let data_mutex: Arc<Mutex<Option<InternalState>>> = Arc::new(Mutex::new(None));
     
     thread::spawn(move || {
         display_thread(rx_display);
     });
+
+    let data_mutex: Arc<Mutex<Option<CommandMessage>>> = Arc::new(Mutex::new(None));
 
     let data_mutex_clone = Arc::clone(&data_mutex);
     thread::spawn(move || {
@@ -56,83 +54,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     let mut settings = Settings::new();
-
-    let mut last_event = String::from("--");
-    // let mut rudder_config = ChannelConfig::default();
-    // let mut motor_config = ChannelConfig::default();
-    
-    // Settings mode temporary variables
-    // let mut temp_rudder_config = rudder_config;
-    // let mut temp_motor_config = motor_config;
-    // let mut selected_parameter = SettingsParameter::RudderDeadzone;
-    
-    let mut mode_just_changed = false;
+        
 
     loop {
-        
-        let button_states = button_reader.get_current_states();
-
-        /*
+        handle_buttons_for_settings(&mut settings, &mut button_reader);
         
         let adc_values = adc_reader.read_all_channels()?;
 
         // Transform ADC values (rudder on channel 0, motor on channel 1)
-        let rudder_value = rudder_config.transform_adc(adc_values[0]);
-        let motor_value = motor_config.transform_adc(adc_values[1]);
+        let rudder_value = settings.channels[0].transform_adc(adc_values[6]);
+        let motor_value = settings.channels[1].transform_adc(adc_values[7]);
 
-        let button_states_bool: [bool; 6] = [
-            button_states[0] == Level::High,
-            button_states[1] == Level::High,
-            button_states[2] == Level::High,
-            button_states[3] == Level::High,
-            button_states[4] == Level::High,
-            button_states[5] == Level::High,
-        ];
-
-        // In normal mode, send B0, B1, B3, B4 (skip B2 and B5)
-        let buttons_sent = [
-            button_states_bool[0],
-            button_states_bool[1],
-            button_states_bool[3],
-            button_states_bool[4],
-        ];
-
-        let (mode_str, current_param, current_val) = match mode {
-            ControlMode::Normal => ("NORMAL", None, None),
-            ControlMode::Settings => {
-                let param_name = selected_parameter.name().to_string();
-                let param_value = selected_parameter.get_value(&temp_rudder_config, &temp_motor_config);
-                ("SETTINGS", Some(param_name), Some(param_value))
-            }
-        };
-
-        let display_data = InternalState {
-            adc_values,
-            button_states: button_states_bool,
-            buttons_sent,
+        let button_states = button_reader.get_current_states();
+        
+        let display_data = DisplayData {
+            settings: settings.clone(),
             rudder_value,
             motor_value,
-            mode: mode_str.to_string(),
-            rudder_config,
-            motor_config,
-            current_parameter: current_param,
-            current_value: current_val,
-            last_event: last_event.clone(),
         };
-
-        let _ = tx_display.try_send(display_data.clone());
+        let _ = tx_display.try_send(display_data);
+        
+        let command_message = CommandMessage {
+            rudder: rudder_value,
+            motor: motor_value,
+            sail: 1500,
+            genoa: 1500
+        };
         
         {
             let mut locked_data = data_mutex.lock().unwrap();
-            *locked_data = Some(display_data);
+            *locked_data = Some(command_message);
         }
-        */
-        
-        let display_data = DisplayData {
-            settings: settings.clone()
-        };
-        
-        let _ = tx_display.try_send(display_data);
         
         thread::sleep(Duration::from_millis(40));
     }

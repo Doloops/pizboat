@@ -1,6 +1,7 @@
 use rppal::gpio::{Gpio, InputPin, Level};
 use std::time::{Duration, Instant};
 
+const DEBOUNCE_MS: u64 = 50;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Edge {
@@ -32,7 +33,7 @@ impl ButtonState {
             return None;
         }
 
-        if self.last_change.elapsed() >= Duration::from_millis(crate::DEBOUNCE_MS)
+        if self.last_change.elapsed() >= Duration::from_millis(DEBOUNCE_MS)
             && self.current != self.last_stable
         {
             let edge = if self.current == Level::High {
@@ -47,15 +48,6 @@ impl ButtonState {
         }
 
         None
-    }
-
-    fn is_long_press(&self) -> bool {
-        if let Some(start) = self.press_start {
-            if self.last_stable == Level::High {
-                return start.elapsed() >= Duration::from_millis(crate::LONG_PRESS_MS);
-            }
-        }
-        false
     }
 }
 
@@ -93,13 +85,5 @@ impl ButtonReader {
 
     pub fn get_current_states(&self) -> Vec<Level> {
         self.states.iter().map(|s| s.last_stable).collect()
-    }
-
-    pub fn is_button_long_press(&self, button_index: usize) -> bool {
-        if button_index < self.states.len() {
-            self.states[button_index].is_long_press()
-        } else {
-            false
-        }
     }
 }

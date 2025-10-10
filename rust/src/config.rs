@@ -73,8 +73,8 @@ const BUTTON_RIGHT: usize = 5;
 pub struct Settings {
     pub mode: ControlMode,
     pub channels: Vec<ChannelConfig>,
-    currentChannel: usize,
-    pub currentValue: SettingsValue
+    current_channel: usize,
+    pub current_value: SettingsValue
 }
 
 impl Settings {
@@ -83,71 +83,66 @@ impl Settings {
         channels.push(ChannelConfig::new("Rudder"));
         channels.push(ChannelConfig::new("Motor"));
         
-        Settings{mode: ControlMode::Normal, channels: channels, currentChannel: 0, currentValue: SettingsValue::Deadzone}
+        Settings{mode: ControlMode::Normal, channels: channels, current_channel: 0, current_value: SettingsValue::Deadzone}
     }
     
-    pub fn firstChannel(&mut self) {
-        self.currentChannel = 0;
-        self.currentValue = SettingsValue::Deadzone;
+    fn previous_channel(&mut self) {
+        self.current_channel = if self.current_channel == 0 { self.channels.len()-1 } else { self.current_channel - 1};
     }
     
-    pub fn previousChannel(&mut self) {
-        self.currentChannel = if self.currentChannel == 0 { self.channels.len()-1 } else { self.currentChannel - 1};
-    }
-    
-    pub fn nextChannel(&mut self) {
-        self.currentChannel = if self.currentChannel == self.channels.len()-1 { 0 } else { self.currentChannel + 1};
+    fn next_channel(&mut self) {
+        self.current_channel = if self.current_channel == self.channels.len()-1 { 0 } else { self.current_channel + 1};
     }
 
-    fn currentChannel(&self) -> &ChannelConfig {
-        &(self.channels[self.currentChannel])
+    fn current_channel(&self) -> &ChannelConfig {
+        &(self.channels[self.current_channel])
     }
 
-    fn mutCurrentChannel(&mut self) -> &mut ChannelConfig {
-        &mut(self.channels[self.currentChannel])
+    fn mut_current_channel(&mut self) -> &mut ChannelConfig {
+        &mut(self.channels[self.current_channel])
     }
     
-    pub fn currentChannelName(&self) -> String {
-        self.channels[self.currentChannel].name.clone()
+    pub fn current_channel_name(&self) -> String {
+        self.channels[self.current_channel].name.clone()
     }
     
-    pub fn previousValue(&mut self) {
-        self.currentValue = match self.currentValue {
+    fn previous_value(&mut self) {
+        self.current_value = match self.current_value {
             SettingsValue::Deadzone => SettingsValue::Max,
             SettingsValue::Min => SettingsValue::Deadzone,
             SettingsValue::Max => SettingsValue::Min
         }
     }
     
-    pub fn nextValue(&mut self) {
-        self.currentValue = match self.currentValue {
+    fn next_value(&mut self) {
+        self.current_value = match self.current_value {
             SettingsValue::Deadzone => SettingsValue::Min,
             SettingsValue::Min => SettingsValue::Max,
             SettingsValue::Max => SettingsValue::Deadzone
         }
     }
     
-    pub fn getValue(&self) -> u16 {
-        match self.currentValue {
-        SettingsValue::Deadzone => self.currentChannel().deadzone,
-        SettingsValue::Min => self.currentChannel().min,
-        SettingsValue::Max => self.currentChannel().max,
+    pub fn get_value(&self) -> u16 {
+        match self.current_value {
+        SettingsValue::Deadzone => self.current_channel().deadzone,
+        SettingsValue::Min => self.current_channel().min,
+        SettingsValue::Max => self.current_channel().max,
         }
     }
     
-    pub fn addValue(&mut self, diff: u16) {
-        match self.currentValue {
-        SettingsValue::Deadzone => { self.mutCurrentChannel().deadzone += diff; }
-        SettingsValue::Min => { self.mutCurrentChannel().min += diff; }
-        SettingsValue::Max => { self.mutCurrentChannel().max += diff; }
+    fn add_value(&mut self, diff: u16) {
+        match self.current_value {
+        SettingsValue::Deadzone => { self.mut_current_channel().deadzone += diff; }
+        SettingsValue::Min => { self.mut_current_channel().min += diff; }
+        SettingsValue::Max => { self.mut_current_channel().max += diff; }
         }
     }
 
-    pub fn subValue(&mut self, diff: u16) {
-        match self.currentValue {
-        SettingsValue::Deadzone => { self.mutCurrentChannel().deadzone -= diff; }
-        SettingsValue::Min => { self.mutCurrentChannel().min -= diff; }
-        SettingsValue::Max => { self.mutCurrentChannel().max -= diff; }
+    fn sub_value(&mut self, diff: u16) {
+        match self.current_value {
+        SettingsValue::Deadzone => { self.mut_current_channel().deadzone -= diff; }
+        SettingsValue::Min => { self.mut_current_channel().min -= diff; }
+        SettingsValue::Max => { self.mut_current_channel().max -= diff; }
         }
     }
     
@@ -157,7 +152,6 @@ impl Settings {
                 let previous_mode = self.mode;
                 self.mode = match self.mode {
                     ControlMode::Normal => {
-                        self.firstChannel();
                         ControlMode::Settings
                     }
                     ControlMode::Settings => {
@@ -189,10 +183,10 @@ impl Settings {
                     ControlMode::Normal => {
                     }
                     ControlMode::Settings => {
-                        self.previousChannel();
+                        self.previous_channel();
                     }
                     ControlMode::SettingsValue => {
-                        self.previousValue();
+                        self.previous_value();
                     }
                 }
             }
@@ -201,17 +195,17 @@ impl Settings {
                     ControlMode::Normal => {
                     }
                     ControlMode::Settings => {
-                        self.nextChannel();
+                        self.next_channel();
                     }
                     ControlMode::SettingsValue => {
-                        self.nextValue();
+                        self.next_value();
                     }
                 }
             }
             BUTTON_UP => {
                 match self.mode {
                     ControlMode::SettingsValue => {
-                        self.addValue(10);
+                        self.add_value(10);
                     }
                     _ => {}
                 }
@@ -219,7 +213,7 @@ impl Settings {
             BUTTON_DOWN => {
                 match self.mode {
                     ControlMode::SettingsValue => {
-                        self.subValue(10);
+                        self.sub_value(10);
                     }
                     _ => {}
                 }

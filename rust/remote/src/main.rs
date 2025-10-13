@@ -3,12 +3,14 @@ mod config;
 mod adc;
 mod buttons;
 mod websocket;
+mod octled;
 
-use websocket::{websocket_thread, CommandMessage};
+use websocket::{websocket_thread, CommandMessage, QueryMessage};
 use config::{Settings, ControlMode};
 use display::{DisplayData, display_thread};
 use adc::AdcReader;
 use buttons::{ButtonReader, Edge};
+use octled::OctLed;
 
 use std::sync::mpsc::{self, SyncSender, Receiver};
 use std::sync::{Arc, Mutex};
@@ -16,11 +18,10 @@ use std::thread;
 use std::time::Duration;
 
 const BUTTON_PINS: [u8; 6] = [12, 25, 24, 23, 18, 15];
+const LED_PINS: [u8; 8] = [16, 20, 21, 26, 19, 13, 6, 5];
 
 const ADC_CHANNELS: usize = 8;
 // const DISPLAY_CHANNELS: [usize; 5] = [0, 1, 2, 6, 7];
-
-
 
 fn handle_buttons_for_settings(settings: &mut Settings, button_reader: &mut ButtonReader) {
     let edges = button_reader.read_and_detect_edges();
@@ -44,7 +45,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut button_reader = ButtonReader::new(&BUTTON_PINS)?;
     let mut adc_reader = AdcReader::new()?;
-
+    
+    let mut led = OctLed::new(&LED_PINS)?;
+    
+    led.k2000();
+    
     let (tx_display, rx_display): (SyncSender<DisplayData>, Receiver<DisplayData>) = mpsc::sync_channel(1);
     
     thread::spawn(move || {
@@ -52,10 +57,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     let data_mutex: Arc<Mutex<Option<CommandMessage>>> = Arc::new(Mutex::new(None));
+    let query_mutex: Arc<Mutex<Option<QueryMessage>>> = Arc::new(Mutex::new(None));
 
     let data_mutex_clone = Arc::clone(&data_mutex);
+    let query_mutex_clone = Arc::clone(&query_mutex);
     thread::spawn(move || {
-        websocket_thread(data_mutex_clone);
+        websocket_thread(data_mutex_clone, query_mutex_clone);
     });
 
     let mut settings = Settings::new("settings.json");
@@ -90,13 +97,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let boom = settings.channels[3].apply_button(button_states[BUTTON_BOOM_UP], button_states[BUTTON_BOOM_DOWN], adc_values[1]);
         let genoa = settings.channels[4].apply_button(button_states[BUTTON_GENOA_UP], button_states[BUTTON_GENOA_DOWN], adc_values[0]);
         
+        let mut wireless_quality: i16 = -1;
+        let mut latency: u64 = 0;
+        
+        {
+            match query_mutex.lock().unwrap().as_ref() {
+                Some(query) => { 
+                    wireless_quality = query.wireless_quality; 
+                    latency = query.latency;
+                    if wireless_quality > 0 && wireless_quality <= 70
+                    {
+                        let qual8 = (wireless_quality * 8) / 70;
+                        led.display_value(qual8 as u8);
+                    }
+                }
+                None => { }
+            }
+        }
+        
         let display_data = DisplayData {
             settings: settings.clone(),
             rudder_star,
             rudder_port,
             motor_value,
             boom,
-            genoa
+            genoa,
+        
+            wireless_quality,
+            latency,
         };
         let _ = tx_display.try_send(display_data);
         

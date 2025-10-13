@@ -15,11 +15,9 @@ pub struct DisplayData {
     pub motor_value: u16,        // Transformed motor value (ADC channel 1)
     pub boom: u16,
     pub genoa: u16,
-    /*
-    pub adc_values: [u16; crate::ADC_CHANNELS],
-    pub button_states: [bool; 6],
-    pub mode: String,
-    */
+    
+    pub wireless_quality: i16,
+    pub latency: u64,
 }
 
 
@@ -158,7 +156,7 @@ fn get_font_data(c: char) -> [u8; 5] {
         'T' => [0x01, 0x01, 0x7F, 0x01, 0x01],
         'U' => [0x3F, 0x40, 0x40, 0x40, 0x3F],
         'V' => [0x07, 0x18, 0x60, 0x18, 0x07],
-        'W' => [0x03, 0x04, 0x78, 0x04, 0x03],
+        'W' => [0x7F, 0x80, 0x7C, 0x80, 0x7F],
         'X' => [0x63, 0x14, 0x08, 0x14, 0x63],
         'Y' => [0x03, 0x0C, 0x70, 0x0C, 0x03],
         'Z' => [0x61, 0x51, 0x49, 0x45, 0x43],
@@ -213,6 +211,9 @@ pub fn display_thread(rx: Receiver<DisplayData>) {
                     
                     let boom_text = format!("SAIL:{} {}", data.boom, data.genoa);
                     display_buffer.draw_text(0, 20, &boom_text);
+
+                    let wifi = format!("W: {} L: {}", data.wireless_quality, data.latency);
+                    display_buffer.draw_text(64, 56, &wifi);
                     
                     let extra = "* &".to_string();
                     display_buffer.draw_text(0, 56, &extra);

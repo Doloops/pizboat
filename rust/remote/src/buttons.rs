@@ -64,7 +64,7 @@ impl ButtonReader {
 
         for &pin_num in pin_numbers {
             let pin = gpio.get(pin_num)?.into_input_pulldown();
-            println!("GPIO {} initialized", pin_num);
+            println!("GPIO Button {} initialized", pin_num);
             pins.push(pin);
             states.push(ButtonState::new());
         }

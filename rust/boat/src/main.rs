@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tungstenite::{connect, Message};
+use std::fs;
 
 const WS_URL: &str = "ws://10.250.1.1:10013";
 
@@ -12,6 +13,8 @@ struct QueryMessage {
     #[serde(rename = "type")]
     msg_type: String,
     timestamp: u64,
+    wireless_quality: i16,
+    latency: u64
 }
 
 #[derive(Debug, Deserialize)]
@@ -38,6 +41,8 @@ impl ServoController {
         pigpio::servo(pin_number, default_pulse_width_us)
           .map_err(|e| anyhow::anyhow!("Servo {} error: {}", name, e))?;
 
+        println!("Init servo {} to pin {}", name.to_string(), pin_number);
+
         Ok(Self { name: name.to_string(), pin_number})
     }
 
@@ -63,7 +68,7 @@ impl BoatController {
     fn new() -> Result<Self, anyhow::Error> {
         Ok(Self {
             rudder_star: ServoController::new("rudder_star", 23)?,
-            rudder_port: ServoController::new("rudder_star", 24)?,
+            rudder_port: ServoController::new("rudder_port", 24)?,
             motor: ServoController::new("motor", 25)?,
             boom: ServoController::new("boom", 22)?,
             genoa: ServoController::new("genoa", 27)?,
@@ -75,6 +80,7 @@ impl BoatController {
             self.rudder_star.set_servo_pulse(val)?;
         }
         if let Some(val) = cmd.rudder_port {
+            println!("Port: {}", val);
             self.rudder_port.set_servo_pulse(val)?;
         }
         if let Some(val) = cmd.motor {
@@ -88,6 +94,30 @@ impl BoatController {
         }
         Ok(())
     }    
+}
+
+fn get_wireless_link_quality() -> i16 {
+    match read_link_quality() {
+        Ok(quality) => quality,
+        Err(err) => {
+            // Equivalent of logger.info in Python
+            eprintln!("Caught exception: {:?}", err);
+            -1
+        }
+    }
+}
+
+fn read_link_quality() -> Result<i16, Box<dyn std::error::Error>> {
+    let content = fs::read_to_string("/proc/net/wireless")?;
+    let lines: Vec<&str> = content.lines().collect();
+    if lines.len() < 3 { return Ok(-1); }
+    let data_line = lines[2].trim();
+    let fields: Vec<&str> = data_line.split_whitespace().collect();
+    if fields.len() <= 2 { return Ok(-1); }
+    let link_quality = fields[2];
+    let link_quality = link_quality.trim_end_matches('.');
+    let quality = link_quality.parse::<i16>()?;
+    Ok(quality)
 }
 
 fn get_timestamp_ms() -> u64 {
@@ -104,13 +134,19 @@ fn handle_websocket(controller: &mut BoatController) -> Result<()> {
     let mut counter = 0;
     let max_counter = 1000 / 40;
     
+    let mut latency = 0;
+    
 
     loop {
         let timestamp = get_timestamp_ms();
         
+        let wireless_quality = get_wireless_link_quality();
+        
         let query = QueryMessage {
             msg_type: "query".to_string(),
             timestamp,
+            wireless_quality,
+            latency
         };
         
         let query_json = serde_json::to_string(&query)?;
@@ -118,20 +154,20 @@ fn handle_websocket(controller: &mut BoatController) -> Result<()> {
         
         match socket.read() {
             Ok(Message::Text(text)) => {
-                // println!("Update {text}");
+                println!("Update {text}");
                 match serde_json::from_str::<CommandResponse>(&text) {
                     Ok(response) => {
                         let now = get_timestamp_ms();
-                        let lag_ms = now.saturating_sub(response.timestamp);
+                        latency = now.saturating_sub(response.timestamp);
                         
                         if let Err(e) = controller.apply_commands(&response) {
                             eprintln!("Error applying command: {}", e);
                         } else {
                             // println!("Commands applied - lag: {}ms", lag_ms);
                             counter += 1;
-                            if ( counter % max_counter == 0 )
+                            if counter % max_counter == 0
                             {
-                                println!("Counter {} lag: {}ms", counter, lag_ms);
+                                println!("Counter {} wireless quality: {} lag: {}ms", counter, wireless_quality, latency);
                             }
                         }
                     }
@@ -161,7 +197,7 @@ fn main() -> Result<()> {
         println!("Connecting to {}", WS_URL);
         if let Err(e) = handle_websocket(&mut controller) {
             eprintln!("Connection error: {}", e);
-            thread::sleep(Duration::from_secs(5));
+            thread::sleep(Duration::from_secs(1));
         }
     }
 }

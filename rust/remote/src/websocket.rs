@@ -6,10 +6,12 @@ use std::thread;
 use std::time::{Duration};
 
 #[derive(Debug, Serialize, Deserialize)]
-struct QueryMessage {
+pub struct QueryMessage {
     #[serde(rename = "type")]
     msg_type: String,
     timestamp: u64,
+    pub wireless_quality: i16,
+    pub latency: u64,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -26,7 +28,7 @@ pub struct CommandMessage {
 }
 
 
-pub fn websocket_thread(data_mutex: Arc<Mutex<Option<CommandMessage>>>) {
+pub fn websocket_thread(data_mutex: Arc<Mutex<Option<CommandMessage>>>, query_mutex: Arc<Mutex<Option<QueryMessage>>>) {
     let server = TcpListener::bind("0.0.0.0:10013").expect("Failed to bind WebSocket server");
     println!("WebSocket server listening on port 10013");
 
@@ -40,6 +42,7 @@ pub fn websocket_thread(data_mutex: Arc<Mutex<Option<CommandMessage>>>) {
         };
 
         let data_mutex = Arc::clone(&data_mutex);
+        let query_mutex = Arc::clone(&query_mutex);
         thread::spawn(move || {
             
             let mut websocket = match accept(stream) {
@@ -60,6 +63,11 @@ pub fn websocket_thread(data_mutex: Arc<Mutex<Option<CommandMessage>>>) {
                         match serde_json::from_str::<QueryMessage>(&text) {
                             Ok(query) => {
                                 timestamp = query.timestamp;
+                                // println!("W {}", query.wireless_quality);
+                                {
+                                    let mut locked_query = query_mutex.lock().unwrap();
+                                    *locked_query = Some(query);
+                                }
                             }
                             Err(e) => eprintln!("JSON parse error: {}", e),
                         }
@@ -73,8 +81,6 @@ pub fn websocket_thread(data_mutex: Arc<Mutex<Option<CommandMessage>>>) {
                         break;
                     }
                 }
-
-
 
                 let data = {
                     let locked_data = data_mutex.lock().unwrap();

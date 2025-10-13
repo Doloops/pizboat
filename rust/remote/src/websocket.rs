@@ -14,7 +14,7 @@ pub struct CommandMessage {
     pub rudder_star: u16,
     pub rudder_port: u16,
     pub motor: u16,
-    pub sail: u16,
+    pub boom: u16,
     pub genoa: u16
 }
 

@@ -29,7 +29,7 @@ impl ChannelConfig {
             min: 1000,
             max: 2000,
             center: 1500,
-            step: 10,
+            step: 100,
             previous_value: 1500
         }
     }
@@ -74,6 +74,23 @@ impl ChannelConfig {
         
         return output
     }
+    
+    pub fn apply_button(&self, up: bool, down: bool, adc_value: u16) -> u16 {
+        let out_range = self.max as u32 - self.min as u32;
+        let diff = ((adc_value as u32 * out_range) / 1024) as u16;
+        
+        // eprintln!("adc_value {} diff {}", adc_value, diff);
+        
+        if up {
+            self.center + diff
+        }
+        else if down {
+            self.center - diff
+        }
+        else {
+            self.center
+        }
+    }
 }
 
 
@@ -84,8 +101,6 @@ const BUTTON_CHANGE_MODE: usize = 2;
 const BUTTON_LEFT: usize = 3;
 const BUTTON_DOWN: usize = 4;
 const BUTTON_RIGHT: usize = 5;
-
-
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Settings {
@@ -102,6 +117,8 @@ impl Settings {
         channels.push(ChannelConfig::new("RudderStar"));
         channels.push(ChannelConfig::new("RudderPort"));
         channels.push(ChannelConfig::new("Motor"));
+        channels.push(ChannelConfig::new("Boom"));
+        channels.push(ChannelConfig::new("Genoa"));
         
         Settings{mode: ControlMode::Normal, settings_path: settings_path.to_string(), channels: channels, current_channel: 0, current_value: SettingsValue::Deadzone}
     }

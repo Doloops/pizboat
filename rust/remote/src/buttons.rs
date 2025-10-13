@@ -83,7 +83,7 @@ impl ButtonReader {
             .collect()
     }
 
-    pub fn get_current_states(&self) -> Vec<Level> {
-        self.states.iter().map(|s| s.last_stable).collect()
+    pub fn get_current_states(&self) -> Vec<bool> {
+        self.states.iter().map(|s| s.last_stable == Level::High).collect()
     }
 }

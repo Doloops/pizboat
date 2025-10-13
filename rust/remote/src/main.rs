@@ -5,7 +5,7 @@ mod buttons;
 mod websocket;
 
 use websocket::{websocket_thread, CommandMessage};
-use config::{Settings};
+use config::{Settings, ControlMode};
 use display::{DisplayData, display_thread};
 use adc::AdcReader;
 use buttons::{ButtonReader, Edge};
@@ -27,12 +27,17 @@ fn handle_buttons_for_settings(settings: &mut Settings, button_reader: &mut Butt
         
     // Handle button events based on mode
     for (i, &edge) in edges.iter().enumerate() {
-        if let Some(Edge::Rising) = edge {
+        if let Some(Edge::Falling) = edge {
             println!("[EVENT] Button {} pressed in mode {:?}", i, settings.mode);
-            settings.handle_button(i);         
+            settings.handle_button(i);
         }
     }
 }
+
+const BUTTON_BOOM_UP:    usize = 0;
+const BUTTON_BOOM_DOWN:  usize = 3;
+const BUTTON_GENOA_UP:   usize = 1;
+const BUTTON_GENOA_DOWN: usize = 4;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Starting RC Boat Controller with WebSocket");
@@ -55,6 +60,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut settings = Settings::new("settings.json");
     
+    let zero_buttons = vec![false; 6];
+    
     match settings.load() {
         Ok(_) => println!("Loaded successfully"),
         Err(e) => {
@@ -65,6 +72,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     settings.save()?;
 
     loop {
+        let previous_mode = settings.mode;
+        
         handle_buttons_for_settings(&mut settings, &mut button_reader);
         
         let adc_values = adc_reader.read_all_channels()?;
@@ -74,15 +83,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let rudder_port = settings.channels[1].transform_adc(adc_values[6]);
         let motor_value = settings.channels[2].transform_adc(adc_values[7]);
 
-        let button_states = button_reader.get_current_states();
+        let button_states = if previous_mode == ControlMode::Normal { button_reader.get_current_states() } else { zero_buttons.clone() };
+        
+        // println!("previous_mode {:?} mode {:?} button_states[0] = {}", previous_mode, settings.mode, button_states[0]);
+        
+        let boom = settings.channels[3].apply_button(button_states[BUTTON_BOOM_UP], button_states[BUTTON_BOOM_DOWN], adc_values[1]);
+        let genoa = settings.channels[4].apply_button(button_states[BUTTON_GENOA_UP], button_states[BUTTON_GENOA_DOWN], adc_values[0]);
         
         let display_data = DisplayData {
             settings: settings.clone(),
             rudder_star,
             rudder_port,
             motor_value,
+            boom,
+            genoa
         };
         let _ = tx_display.try_send(display_data);
+        
         
         let command_message = CommandMessage {
             msg_type: String::from("command"),
@@ -90,8 +107,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             rudder_star,
             rudder_port,
             motor: motor_value,
-            sail: 1500,
-            genoa: 1500
+            boom,
+            genoa
         };
         
         {

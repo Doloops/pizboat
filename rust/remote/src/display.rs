@@ -13,6 +13,8 @@ pub struct DisplayData {
     pub rudder_star: u16,       // Transformed rudder value (ADC channel 0)
     pub rudder_port: u16,       // Transformed rudder value (ADC channel 0)
     pub motor_value: u16,        // Transformed motor value (ADC channel 1)
+    pub boom: u16,
+    pub genoa: u16,
     /*
     pub adc_values: [u16; crate::ADC_CHANNELS],
     pub button_states: [bool; 6],
@@ -156,13 +158,17 @@ fn get_font_data(c: char) -> [u8; 5] {
         'T' => [0x01, 0x01, 0x7F, 0x01, 0x01],
         'U' => [0x3F, 0x40, 0x40, 0x40, 0x3F],
         'V' => [0x07, 0x18, 0x60, 0x18, 0x07],
-        'W' => [0x03, 0x04, 0x78, 0x04, 0x03],        
+        'W' => [0x03, 0x04, 0x78, 0x04, 0x03],
         'X' => [0x63, 0x14, 0x08, 0x14, 0x63],
         'Y' => [0x03, 0x0C, 0x70, 0x0C, 0x03],
         'Z' => [0x61, 0x51, 0x49, 0x45, 0x43],
         ':' => [0x00, 0x36, 0x36, 0x00, 0x00],
         ' ' => [0x00, 0x00, 0x00, 0x00, 0x00],
         '-' => [0x08, 0x08, 0x08, 0x08, 0x08],
+        '$' => [0x24, 0x4A, 0xFF, 0x4A, 0x32],
+        '§' => [0x20, 0x42, 0xFF, 0x42, 0x20], 
+        '*' => [0x2A, 0x1C, 0x7F, 0x1C, 0x2A],
+        '&' => [0x0E, 0x1F, 0x3E, 0x1F, 0x0E],
         _ => [0x7F, 0x41, 0x41, 0x41, 0x7F],
     }
 }
@@ -193,25 +199,33 @@ pub fn display_thread(rx: Receiver<DisplayData>) {
         if let Some(ref data) = current_data {
             display_buffer.clear();
             
+            let mode_settings = format!("Settings");
+            
             // Display mode on top
-            let mode = format!("Mode: {:?}", data.settings.mode);
-            display_buffer.draw_text(0, 0, &mode);
-
             match data.settings.mode {
                 ControlMode::Normal => {
                     // Normal mode display
-                    let rudder_text = format!("RUD:{} {}", data.rudder_star, data.rudder_port);
-                    display_buffer.draw_text(0, 10, &rudder_text);
+                    let rudder_text = format!("§ RUD:{} {}", data.rudder_star, data.rudder_port);
+                    display_buffer.draw_text(0, 0, &rudder_text);
                     
                     let motor_text = format!("MOT:{}", data.motor_value);
-                    display_buffer.draw_text(0, 20, &motor_text);
-
+                    display_buffer.draw_text(0, 10, &motor_text);
+                    
+                    let boom_text = format!("SAIL:{} {}", data.boom, data.genoa);
+                    display_buffer.draw_text(0, 20, &boom_text);
+                    
+                    let extra = "* &".to_string();
+                    display_buffer.draw_text(0, 56, &extra);
                 }
                 ControlMode::Settings => {
+                    display_buffer.draw_text(0, 0, &mode_settings);
+
                     let settings = format!("Channel: {}", data.settings.current_channel_name());
                     display_buffer.draw_text(0, 12, &settings);
                 }
                 ControlMode::SettingsValue => {
+                    display_buffer.draw_text(0, 0, &mode_settings);
+                    
                     let settings = format!("Channel: {}", data.settings.current_channel_name());
                     display_buffer.draw_text(0, 12, &settings);
 

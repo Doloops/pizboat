@@ -22,6 +22,8 @@ struct CommandResponse {
     rudder_star: Option<u32>,
     rudder_port: Option<u32>,
     motor: Option<u32>,
+    boom: Option<u32>,
+    genoa: Option<u32>,
 }
 
 struct ServoController {
@@ -52,16 +54,20 @@ impl ServoController {
 struct BoatController {
     rudder_star: ServoController,
     rudder_port: ServoController,
-    motor: ServoController
+    motor: ServoController,
+    boom: ServoController,
+    genoa: ServoController,
 }
 
 impl BoatController {
-    fn new() -> Self {
-        BoatController {
-            rudder_star: ServoController::new("rudder_star", 23).expect("Failed to init"),
-            rudder_port: ServoController::new("rudder_star", 24).expect("Failed to init"),
-            motor: ServoController::new("motor", 25).expect("Failed to init"),
-        }
+    fn new() -> Result<Self, anyhow::Error> {
+        Ok(Self {
+            rudder_star: ServoController::new("rudder_star", 23)?,
+            rudder_port: ServoController::new("rudder_star", 24)?,
+            motor: ServoController::new("motor", 25)?,
+            boom: ServoController::new("boom", 22)?,
+            genoa: ServoController::new("genoa", 27)?,
+        })
     }
     
     fn apply_commands(&mut self, cmd: &CommandResponse) -> Result<()> {
@@ -73,6 +79,12 @@ impl BoatController {
         }
         if let Some(val) = cmd.motor {
             self.motor.set_servo_pulse(val)?;
+        }
+        if let Some(val) = cmd.boom {
+            self.boom.set_servo_pulse(val)?;
+        }
+        if let Some(val) = cmd.genoa {
+            self.genoa.set_servo_pulse(val)?;
         }
         Ok(())
     }    
@@ -132,7 +144,7 @@ fn main() -> Result<()> {
     pigpio::initialize()
       .expect("Could not init pigpio !");
 
-    let mut controller = BoatController::new();
+    let mut controller = BoatController::new()?;
 
     loop {
         println!("Connecting to {}", WS_URL);

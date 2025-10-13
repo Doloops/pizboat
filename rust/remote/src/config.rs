@@ -194,81 +194,34 @@ impl Settings {
     }
     
     pub fn handle_button(&mut self, button: usize) {
-        match button {
-            BUTTON_CHANGE_MODE => {
-                let previous_mode = self.mode;
-                self.mode = match self.mode {
-                    ControlMode::Normal => {
-                        ControlMode::Settings
-                    }
-                    ControlMode::Settings => {
-                        ControlMode::SettingsValue
-                    }
-                    ControlMode::SettingsValue => {
-                        let _ = self.save();
-                        ControlMode::Settings
-                    }
-                };
-                println!("[Changed mode {:?} => {:?}", previous_mode, self.mode);
-            }
-            BUTTON_CANCEL_MODE => {
-                let previous_mode = self.mode;
-                self.mode = match self.mode {
-                    ControlMode::Normal => {
-                        ControlMode::Normal
-                    }
-                    ControlMode::Settings => {
-                        ControlMode::Normal
-                    }
-                    ControlMode::SettingsValue => {
-                        ControlMode::Settings
-                    }
-                };
-                println!("[Changed mode {:?} => {:?}", previous_mode, self.mode);
-            }
-            BUTTON_LEFT => {
-                match self.mode {
-                    ControlMode::Normal => {
-                    }
-                    ControlMode::Settings => {
-                        self.previous_channel();
-                    }
-                    ControlMode::SettingsValue => {
-                        self.previous_value();
-                    }
-                }
-            }
-            BUTTON_RIGHT => {
-                match self.mode {
-                    ControlMode::Normal => {
-                    }
-                    ControlMode::Settings => {
-                        self.next_channel();
-                    }
-                    ControlMode::SettingsValue => {
-                        self.next_value();
-                    }
-                }
-            }
-            BUTTON_UP => {
-                match self.mode {
-                    ControlMode::SettingsValue => {
-                        self.add_value(10);
-                    }
+        match self.mode {
+            ControlMode::Normal => {
+                match button {
+                    BUTTON_CHANGE_MODE => { self.mode = ControlMode::Settings; }
                     _ => {}
                 }
             }
-            BUTTON_DOWN => {
-                match self.mode {
-                    ControlMode::SettingsValue => {
-                        self.sub_value(10);
-                    }
+            ControlMode::Settings => {
+                match button {
+                    BUTTON_CHANGE_MODE => { self.mode = ControlMode::SettingsValue; }
+                    BUTTON_CANCEL_MODE => { self.mode = ControlMode::Normal; let _ = self.save(); }
+                    BUTTON_LEFT => { self.previous_channel(); }
+                    BUTTON_RIGHT => { self.next_channel(); }
                     _ => {}
                 }
             }
-            _ => {}
-        };        
-        
+            ControlMode::SettingsValue => {
+                match button {
+                    BUTTON_CHANGE_MODE => { self.mode = ControlMode::Normal; let _ = self.save(); self.mode = ControlMode::Settings; }
+                    BUTTON_CANCEL_MODE => { self.mode = ControlMode::Settings; }
+                    BUTTON_LEFT => { self.previous_value(); }
+                    BUTTON_RIGHT => { self.next_value(); }
+                    BUTTON_UP => { self.add_value(10); }
+                    BUTTON_DOWN => { self.sub_value(10); }
+                    _ => {}
+                }
+            }
+        };  
     }
     
     pub fn save(&self) -> io::Result<()> {

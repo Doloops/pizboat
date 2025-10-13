@@ -101,6 +101,10 @@ fn handle_websocket(controller: &mut BoatController) -> Result<()> {
     let (mut socket, _response) = connect(WS_URL)?;
     println!("WebSocket connected to {}", WS_URL);
 
+    let mut counter = 0;
+    let max_counter = 1000 / 40;
+    
+
     loop {
         let timestamp = get_timestamp_ms();
         
@@ -114,7 +118,7 @@ fn handle_websocket(controller: &mut BoatController) -> Result<()> {
         
         match socket.read() {
             Ok(Message::Text(text)) => {
-                println!("Update {text}");
+                // println!("Update {text}");
                 match serde_json::from_str::<CommandResponse>(&text) {
                     Ok(response) => {
                         let now = get_timestamp_ms();
@@ -124,6 +128,11 @@ fn handle_websocket(controller: &mut BoatController) -> Result<()> {
                             eprintln!("Error applying command: {}", e);
                         } else {
                             // println!("Commands applied - lag: {}ms", lag_ms);
+                            counter += 1;
+                            if ( counter % max_counter == 0 )
+                            {
+                                println!("Counter {} lag: {}ms", counter, lag_ms);
+                            }
                         }
                     }
                     Err(e) => eprintln!("JSON parse error: {}", e),
@@ -135,6 +144,8 @@ fn handle_websocket(controller: &mut BoatController) -> Result<()> {
             }
             _ => {}
         }
+        
+        thread::sleep(Duration::from_millis(40));
     }
 
     Ok(())

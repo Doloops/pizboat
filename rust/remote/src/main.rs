@@ -103,7 +103,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         
         let command_message = CommandMessage {
             msg_type: String::from("command"),
-            timestamp: 823,
+            timestamp: 0,
             rudder_star,
             rudder_port,
             motor: motor_value,

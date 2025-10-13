@@ -1,5 +1,6 @@
 use anyhow::Result;
-use rppal::gpio::{Gpio, OutputPin};
+use anyhow::Context;
+use rust_pigpio::pigpio;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::thread;
@@ -21,42 +22,31 @@ struct CommandResponse {
     #[serde(rename = "type")]
     msg_type: String,
     timestamp: u64,
-    rudder_star: Option<u16>,
-    rudder_port: Option<u16>,
-    motor: Option<u16>,
+    rudder_star: Option<u32>,
+    rudder_port: Option<u32>,
+    motor: Option<u32>,
 }
 
 struct ServoController {
     name: String,
-    pin: OutputPin,
+    pin_number: u32,
 }
 
 impl ServoController {
-    fn new(name: &str, pin_number: u8) -> Result<Self> {
-
-        let gpio = Gpio::new()?;
-        
-        let mut pin = gpio.get(pin_number)?.into_output();
-        pin.set_pwm_frequency(PWM_FREQUENCY, 0.0)?;
-        
+    fn new(name: &str, pin_number: u32) -> Result<Self> {
         let default_pulse_width_us = 1480;
         
-        let period_us = 1_000_000.0 / PWM_FREQUENCY;
-        let duty_cycle = (default_pulse_width_us as f64) / period_us;
+        pigpio::servo(pin_number, default_pulse_width_us)
+          .map_err(|e| anyhow::anyhow!("Servo {} error: {}", name, e))?;
 
-        pin.set_pwm_frequency(PWM_FREQUENCY, duty_cycle)?;
-
-        Ok(Self { name: name.to_string(), pin})
+        Ok(Self { name: name.to_string(), pin_number})
     }
 
-    fn set_servo_pulse(&mut self, pulse_width_us: u16) -> Result<()> {
+    fn set_servo_pulse(&mut self, pulse_width_us: u32) -> Result<()> {
         let pulse_width_us = pulse_width_us.clamp(1000, 2000);
-        
-        let period_us = 1_000_000.0 / PWM_FREQUENCY;
-        let duty_cycle = (pulse_width_us as f64) / period_us;
 
-        // println!("pin duty_cycle {}", duty_cycle);
-        self.pin.set_pwm_frequency(PWM_FREQUENCY, duty_cycle)?;
+        pigpio::servo(self.pin_number, pulse_width_us)
+          .map_err(|e| anyhow::anyhow!("Servo {} error: {}", self.name, e))?;
 
         Ok(())
     }
@@ -146,6 +136,9 @@ fn handle_websocket(controller: &mut BoatController) -> Result<()> {
 }
 
 fn main() -> Result<()> {
+    pigpio::initialize()
+      .expect("Could not init pigpio !");
+
     let mut controller = BoatController::new();
 
     loop {

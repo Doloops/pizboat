@@ -27,57 +27,68 @@ struct CommandResponse {
 }
 
 struct ServoController {
-    pins: HashMap<String, OutputPin>,
+    name: String,
+    pin: OutputPin,
 }
 
 impl ServoController {
-    fn new() -> Result<Self> {
-        let gpio = Gpio::new()?;
-        let mut pins = HashMap::new();
-        
-        let mut rudder_pin_23 = gpio.get(23)?.into_output();
-        rudder_pin_23.set_pwm_frequency(PWM_FREQUENCY, 0.0)?;
-        pins.insert("rudder_star".to_string(), rudder_pin_23);
-        
-        let mut rudder_pin_24 = gpio.get(24)?.into_output();
-        rudder_pin_24.set_pwm_frequency(PWM_FREQUENCY, 0.0)?;
-        pins.insert("rudder_port".to_string(), rudder_pin_24);
-        
-        let mut motor_pin = gpio.get(25)?.into_output();
-        motor_pin.set_pwm_frequency(PWM_FREQUENCY, 0.0)?;
-        pins.insert("motor".to_string(), motor_pin);
+    fn new(name: &str, pin_number: u8) -> Result<Self> {
 
-        Ok(Self { pins })
+        let gpio = Gpio::new()?;
+        
+        let mut pin = gpio.get(pin_number)?.into_output();
+        pin.set_pwm_frequency(PWM_FREQUENCY, 0.0)?;
+        
+        let default_pulse_width_us = 1480;
+        
+        let period_us = 1_000_000.0 / PWM_FREQUENCY;
+        let duty_cycle = (default_pulse_width_us as f64) / period_us;
+
+        pin.set_pwm_frequency(PWM_FREQUENCY, duty_cycle)?;
+
+        Ok(Self { name: name.to_string(), pin})
     }
 
-    fn set_servo_pulse(&mut self, servo_name: &str, pulse_width_us: u16) -> Result<()> {
+    fn set_servo_pulse(&mut self, pulse_width_us: u16) -> Result<()> {
         let pulse_width_us = pulse_width_us.clamp(1000, 2000);
+        
         let period_us = 1_000_000.0 / PWM_FREQUENCY;
         let duty_cycle = (pulse_width_us as f64) / period_us;
 
-        if let Some(pin) = self.pins.get_mut(servo_name) {
-            println!("pin duty_cycle {}", duty_cycle);
-            pin.set_pwm_frequency(PWM_FREQUENCY, duty_cycle)?;
-        }
-        else {
-            println!("Unknown servo {}", servo_name);
-        }
+        // println!("pin duty_cycle {}", duty_cycle);
+        self.pin.set_pwm_frequency(PWM_FREQUENCY, duty_cycle)?;
 
         Ok(())
     }
+}
 
+struct BoatController {
+    rudder_star: ServoController,
+    rudder_port: ServoController,
+    motor: ServoController
+}
+
+impl BoatController {
+    fn new() -> Self {
+        BoatController {
+            rudder_star: ServoController::new("rudder_star", 23).expect("Failed to init"),
+            rudder_port: ServoController::new("rudder_star", 24).expect("Failed to init"),
+            motor: ServoController::new("motor", 25).expect("Failed to init"),
+        }
+    }
+    
     fn apply_commands(&mut self, cmd: &CommandResponse) -> Result<()> {
         if let Some(val) = cmd.rudder_star {
-            self.set_servo_pulse("rudder_star", val)?;
+            self.rudder_star.set_servo_pulse(val)?;
         }
         if let Some(val) = cmd.rudder_port {
-            self.set_servo_pulse("rudder_port", val)?;
+            self.rudder_port.set_servo_pulse(val)?;
         }
         if let Some(val) = cmd.motor {
-            self.set_servo_pulse("motor", val)?;
+            self.motor.set_servo_pulse(val)?;
         }
         Ok(())
-    }
+    }    
 }
 
 fn get_timestamp_ms() -> u64 {
@@ -87,7 +98,7 @@ fn get_timestamp_ms() -> u64 {
         .as_millis() as u64
 }
 
-fn handle_websocket(controller: &mut ServoController) -> Result<()> {
+fn handle_websocket(controller: &mut BoatController) -> Result<()> {
     let (mut socket, _response) = connect(WS_URL)?;
     println!("WebSocket connected to {}", WS_URL);
 
@@ -106,6 +117,7 @@ fn handle_websocket(controller: &mut ServoController) -> Result<()> {
         
         match socket.read() {
             Ok(Message::Text(text)) => {
+                println!("Update {text}");
                 match serde_json::from_str::<CommandResponse>(&text) {
                     Ok(response) => {
                         let now = get_timestamp_ms();
@@ -134,7 +146,7 @@ fn handle_websocket(controller: &mut ServoController) -> Result<()> {
 }
 
 fn main() -> Result<()> {
-    let mut controller = ServoController::new()?;
+    let mut controller = BoatController::new();
 
     loop {
         println!("Connecting to {}", WS_URL);

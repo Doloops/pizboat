@@ -11,9 +11,12 @@ pub enum ControlMode {
 pub struct ChannelConfig {
     pub name: String,
     pub deadzone: u16,    // Deadzone around center (512)
+    pub center: u16,      // Center output value
     pub min: u16,         // Minimum output value
     pub max: u16,         // Maximum output value
-    pub center: u16,      // Center output value
+    pub step: u16,    // Maximum change in values between two updates
+    
+    previous_value: u16
 }
 
 impl ChannelConfig {
@@ -24,20 +27,26 @@ impl ChannelConfig {
             min: 1000,
             max: 2000,
             center: 1500,
+            step: 10,
+            previous_value: 1500
         }
     }
 }
 
 impl ChannelConfig {
-    pub fn transform_adc(&self, adc_value: u16) -> u16 {
+    pub fn transform_adc(&mut self, adc_value: u16) -> u16 {
         let center_adc = 512;
         let adc = adc_value as i32;
         let center = center_adc as i32;
         
         // Apply deadzone
         if (adc - center).abs() < self.deadzone as i32 {
-            return self.center;
+            let output = self.center.clamp(self.previous_value - self.step, self.previous_value + self.step);
+            self.previous_value = output;
+            return output;
         }
+        
+        let mut output: u16;
         
         // Map ADC range to output range
         if adc > center {
@@ -45,16 +54,23 @@ impl ChannelConfig {
             let adc_range = 1023 - (center + self.deadzone as i32);
             let out_range = self.max as i32 - self.center as i32;
             let normalized = (adc - center - self.deadzone as i32).max(0);
-            let output = self.center as i32 + (normalized * out_range / adc_range);
-            output.clamp(self.center as i32, self.max as i32) as u16
+            output = (self.center as i32 + (normalized * out_range / adc_range)) as u16;
+            // output = output.clamp(self.center as i32, self.max as i32) as u16
         } else {
             // Below center: map [0, center-deadzone] to [min, center]
             let adc_range = center - self.deadzone as i32;
             let out_range = self.center as i32 - self.min as i32;
             let normalized = (center - self.deadzone as i32 - adc).max(0);
-            let output = self.center as i32 - (normalized * out_range / adc_range);
-            output.clamp(self.min as i32, self.center as i32) as u16
+            output = (self.center as i32 - (normalized * out_range / adc_range)) as u16;
+            // output = output.clamp(self.min as i32, self.center as i32) as u16
         }
+        
+        output = output.clamp(self.min, self.max);
+        output = output.clamp(self.previous_value - self.step, self.previous_value + self.step);
+        
+        self.previous_value = output;
+        
+        return output
     }
 }
 
@@ -109,10 +125,11 @@ impl Settings {
     
     fn previous_value(&mut self) {
         self.current_value = match self.current_value {
-            SettingsValue::Deadzone => SettingsValue::Max,
+            SettingsValue::Deadzone => SettingsValue::Step,
             SettingsValue::Center => SettingsValue::Deadzone,
             SettingsValue::Min => SettingsValue::Center,
-            SettingsValue::Max => SettingsValue::Min
+            SettingsValue::Max => SettingsValue::Min,
+            SettingsValue::Step => SettingsValue::Max
         }
     }
     
@@ -121,7 +138,8 @@ impl Settings {
             SettingsValue::Deadzone => SettingsValue::Center,
             SettingsValue::Center => SettingsValue::Min,
             SettingsValue::Min => SettingsValue::Max,
-            SettingsValue::Max => SettingsValue::Deadzone
+            SettingsValue::Max => SettingsValue::Step,
+            SettingsValue::Step => SettingsValue::Deadzone
         }
     }
     
@@ -131,6 +149,7 @@ impl Settings {
         SettingsValue::Center => self.current_channel().center,
         SettingsValue::Min => self.current_channel().min,
         SettingsValue::Max => self.current_channel().max,
+        SettingsValue::Step => self.current_channel().step,
         }
     }
     
@@ -140,6 +159,7 @@ impl Settings {
         SettingsValue::Center => { self.mut_current_channel().center += diff; }
         SettingsValue::Min => { self.mut_current_channel().min += diff; }
         SettingsValue::Max => { self.mut_current_channel().max += diff; }
+        SettingsValue::Step => { self.mut_current_channel().step += 1; }
         }
     }
 
@@ -149,6 +169,7 @@ impl Settings {
         SettingsValue::Center => { self.mut_current_channel().center -= diff; }
         SettingsValue::Min => { self.mut_current_channel().min -= diff; }
         SettingsValue::Max => { self.mut_current_channel().max -= diff; }
+        SettingsValue::Step => { self.mut_current_channel().step -= 1; }
         }
     }
     
@@ -237,5 +258,6 @@ pub enum SettingsValue {
     Deadzone,
     Center,
     Min,
-    Max
+    Max,
+    Step
 }

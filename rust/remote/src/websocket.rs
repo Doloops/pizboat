@@ -5,9 +5,14 @@ use tungstenite::{accept, Message};
 use std::thread;
 use std::time::{Duration};
 
-#[derive(Clone, Copy, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct CommandMessage {
-    pub rudder: u16,
+    #[serde(rename = "type")]
+    pub msg_type: String,
+    pub timestamp: u64,
+    
+    pub rudder_star: u16,
+    pub rudder_port: u16,
     pub motor: u16,
     pub sail: u16,
     pub genoa: u16

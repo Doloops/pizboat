@@ -10,7 +10,8 @@ use crate::config::Settings;
 #[derive(Clone, Serialize, Deserialize)]
 pub struct DisplayData {
     pub settings: Settings,
-    pub rudder_value: u16,       // Transformed rudder value (ADC channel 0)
+    pub rudder_star: u16,       // Transformed rudder value (ADC channel 0)
+    pub rudder_port: u16,       // Transformed rudder value (ADC channel 0)
     pub motor_value: u16,        // Transformed motor value (ADC channel 1)
     /*
     pub adc_values: [u16; crate::ADC_CHANNELS],
@@ -199,11 +200,11 @@ pub fn display_thread(rx: Receiver<DisplayData>) {
             match data.settings.mode {
                 ControlMode::Normal => {
                     // Normal mode display
-                    let rudder_text = format!("RUD:{}", data.rudder_value);
+                    let rudder_text = format!("RUD:{} {}", data.rudder_star, data.rudder_port);
                     display_buffer.draw_text(0, 10, &rudder_text);
                     
                     let motor_text = format!("MOT:{}", data.motor_value);
-                    display_buffer.draw_text(64, 10, &motor_text);
+                    display_buffer.draw_text(0, 20, &motor_text);
 
                 }
                 ControlMode::Settings => {

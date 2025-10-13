@@ -80,7 +80,8 @@ pub struct Settings {
 impl Settings {
     pub fn new() -> Self {
         let mut channels = Vec::new();
-        channels.push(ChannelConfig::new("Rudder"));
+        channels.push(ChannelConfig::new("RudderStar"));
+        channels.push(ChannelConfig::new("RudderPort"));
         channels.push(ChannelConfig::new("Motor"));
         
         Settings{mode: ControlMode::Normal, channels: channels, current_channel: 0, current_value: SettingsValue::Deadzone}
@@ -109,14 +110,16 @@ impl Settings {
     fn previous_value(&mut self) {
         self.current_value = match self.current_value {
             SettingsValue::Deadzone => SettingsValue::Max,
-            SettingsValue::Min => SettingsValue::Deadzone,
+            SettingsValue::Center => SettingsValue::Deadzone,
+            SettingsValue::Min => SettingsValue::Center,
             SettingsValue::Max => SettingsValue::Min
         }
     }
     
     fn next_value(&mut self) {
         self.current_value = match self.current_value {
-            SettingsValue::Deadzone => SettingsValue::Min,
+            SettingsValue::Deadzone => SettingsValue::Center,
+            SettingsValue::Center => SettingsValue::Min,
             SettingsValue::Min => SettingsValue::Max,
             SettingsValue::Max => SettingsValue::Deadzone
         }
@@ -125,6 +128,7 @@ impl Settings {
     pub fn get_value(&self) -> u16 {
         match self.current_value {
         SettingsValue::Deadzone => self.current_channel().deadzone,
+        SettingsValue::Center => self.current_channel().center,
         SettingsValue::Min => self.current_channel().min,
         SettingsValue::Max => self.current_channel().max,
         }
@@ -133,6 +137,7 @@ impl Settings {
     fn add_value(&mut self, diff: u16) {
         match self.current_value {
         SettingsValue::Deadzone => { self.mut_current_channel().deadzone += diff; }
+        SettingsValue::Center => { self.mut_current_channel().center += diff; }
         SettingsValue::Min => { self.mut_current_channel().min += diff; }
         SettingsValue::Max => { self.mut_current_channel().max += diff; }
         }
@@ -141,6 +146,7 @@ impl Settings {
     fn sub_value(&mut self, diff: u16) {
         match self.current_value {
         SettingsValue::Deadzone => { self.mut_current_channel().deadzone -= diff; }
+        SettingsValue::Center => { self.mut_current_channel().center -= diff; }
         SettingsValue::Min => { self.mut_current_channel().min -= diff; }
         SettingsValue::Max => { self.mut_current_channel().max -= diff; }
         }
@@ -229,6 +235,7 @@ impl Settings {
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum SettingsValue {
     Deadzone,
+    Center,
     Min,
     Max
 }

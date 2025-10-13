@@ -62,20 +62,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let adc_values = adc_reader.read_all_channels()?;
 
         // Transform ADC values (rudder on channel 0, motor on channel 1)
-        let rudder_value = settings.channels[0].transform_adc(adc_values[6]);
-        let motor_value = settings.channels[1].transform_adc(adc_values[7]);
+        let rudder_star = settings.channels[0].transform_adc(adc_values[6]);
+        let rudder_port = settings.channels[1].transform_adc(adc_values[6]);
+        let motor_value = settings.channels[2].transform_adc(adc_values[7]);
 
         let button_states = button_reader.get_current_states();
         
         let display_data = DisplayData {
             settings: settings.clone(),
-            rudder_value,
+            rudder_star,
+            rudder_port,
             motor_value,
         };
         let _ = tx_display.try_send(display_data);
         
         let command_message = CommandMessage {
-            rudder: rudder_value,
+            msg_type: String::from("command"),
+            timestamp: 823,
+            rudder_star,
+            rudder_port,
             motor: motor_value,
             sail: 1500,
             genoa: 1500

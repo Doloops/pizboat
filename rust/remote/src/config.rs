@@ -1,4 +1,6 @@
 use serde::{Serialize, Deserialize};
+use std::fs;
+use std::io::{self, Write};
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum ControlMode {
@@ -88,19 +90,20 @@ const BUTTON_RIGHT: usize = 5;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Settings {
     pub mode: ControlMode,
+    settings_path: String,
     pub channels: Vec<ChannelConfig>,
     current_channel: usize,
     pub current_value: SettingsValue
 }
 
 impl Settings {
-    pub fn new() -> Self {
+    pub fn new(settings_path: &'static str) -> Self {
         let mut channels = Vec::new();
         channels.push(ChannelConfig::new("RudderStar"));
         channels.push(ChannelConfig::new("RudderPort"));
         channels.push(ChannelConfig::new("Motor"));
         
-        Settings{mode: ControlMode::Normal, channels: channels, current_channel: 0, current_value: SettingsValue::Deadzone}
+        Settings{mode: ControlMode::Normal, settings_path: settings_path.to_string(), channels: channels, current_channel: 0, current_value: SettingsValue::Deadzone}
     }
     
     fn previous_channel(&mut self) {
@@ -185,6 +188,7 @@ impl Settings {
                         ControlMode::SettingsValue
                     }
                     ControlMode::SettingsValue => {
+                        let _ = self.save();
                         ControlMode::Settings
                     }
                 };
@@ -250,6 +254,22 @@ impl Settings {
         
     }
     
+    pub fn save(&self) -> io::Result<()> {
+        let json = serde_json::to_string_pretty(self)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        
+        let mut file = fs::File::create(self.settings_path.clone())?;
+        file.write_all(json.as_bytes())?;
+        Ok(())
+    }
+    
+    pub fn load(&mut self) -> io::Result<()> {
+        let content = fs::read_to_string(self.settings_path.clone())?;
+        let loaded: Settings = serde_json::from_str(&content)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        *self = loaded;
+        Ok(())
+    }
 }
     
 

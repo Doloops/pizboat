@@ -53,8 +53,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         websocket_thread(data_mutex_clone);
     });
 
-    let mut settings = Settings::new();
-        
+    let mut settings = Settings::new("settings.json");
+    
+    match settings.load() {
+        Ok(_) => println!("Loaded successfully"),
+        Err(e) => {
+            println!("Error loading: {}", e);
+        }
+    }
+
+    settings.save()?;
 
     loop {
         handle_buttons_for_settings(&mut settings, &mut button_reader);

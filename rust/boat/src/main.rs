@@ -1,14 +1,11 @@
 use anyhow::Result;
-use anyhow::Context;
 use rust_pigpio::pigpio;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tungstenite::{connect, Message};
 
 const WS_URL: &str = "ws://10.250.1.1:10013";
-const PWM_FREQUENCY: f64 = 50.0;
 
 #[derive(Debug, Serialize)]
 struct QueryMessage {
@@ -92,8 +89,6 @@ fn handle_websocket(controller: &mut BoatController) -> Result<()> {
     let (mut socket, _response) = connect(WS_URL)?;
     println!("WebSocket connected to {}", WS_URL);
 
-    let query_interval = Duration::from_millis(20);
-    
     loop {
         let timestamp = get_timestamp_ms();
         
@@ -128,8 +123,6 @@ fn handle_websocket(controller: &mut BoatController) -> Result<()> {
             }
             _ => {}
         }
-        
-        thread::sleep(query_interval);
     }
 
     Ok(())

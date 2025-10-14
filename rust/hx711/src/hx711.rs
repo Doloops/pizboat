@@ -10,7 +10,7 @@ use rust_pigpio::{initialize, set_mode, read, write, terminate, INPUT, OUTPUT, O
 // use rust_pigpio::pwm::*;
 // use rust_pigpio::pigpio::constants::GpioMode;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 /// HX711 gain settings which also select the channel
 #[derive(Clone, Copy, Debug)]
@@ -84,7 +84,17 @@ impl HX711 {
     }
     
     pub fn do_sleep(&self) {
-        for n in 1..100 {
+        let start = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos();
+
+        loop {
+            let now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos();
+            let diff = now - start;
+            // println!("diff {}", diff);
+            
+            if diff > 5000
+            {
+                break;
+            }
         }
     }
 
@@ -95,51 +105,39 @@ impl HX711 {
         return value == 0;
     }
     
-    /// Read a single byte from the HX711
-    fn read_next_byte(&mut self) -> u8 {
-        let mut byte_value: u8 = 0;
-        
-        // Read 8 bits
-        for i in 0..8 {
-            // Clock pulse
-            // self.pd_sck.set_high();
-            write(self.pd_sck_pin, ON).unwrap();
-            self.do_sleep();
-            
-            // Read bit based on bit format
-            // let bit_value = if self.dout.is_high() { 1 } else { 0 };
-            let bit_value = read(self.dout_pin).unwrap() as u8;
-            
-            byte_value |= bit_value << i;
-            
-            // self.pd_sck.set_low();
-            write(self.pd_sck_pin, OFF).unwrap();
-            self.do_sleep();
-        }
-        
-        byte_value
-    }
-    
     /// Read raw 24-bit value from the HX711
-    fn read_raw_bytes(&mut self) -> Option<i32> {
+    fn read_raw_bytes(&mut self) -> i32 {
         // Wait until HX711 is ready (with a simple timeout)
-        println!("read_raw_bytes()");
         
         let mut timeout = 0;
         while !self.is_ready() {
             timeout += 1;
             if timeout > 1000000 {
-                return None; // Timeout after ~1 second
+                return -1; // Timeout after ~1 second
             }
             thread::sleep(Duration::from_micros(1));
         }
-        
-        println!("is_ready() !");
+        let mut count: i32 = 0;
         
         // Read three bytes of data
-        let first_byte = self.read_next_byte();
-        let second_byte = self.read_next_byte();
-        let third_byte = self.read_next_byte();
+        for i in 0..24 {
+            write(self.pd_sck_pin, ON).unwrap();
+            self.do_sleep();
+
+            write(self.pd_sck_pin, OFF).unwrap();
+            self.do_sleep();            
+            
+            // Read bit based on bit format
+            // let bit_value = if self.dout.is_high() { 1 } else { 0 };
+            let bit_value = read(self.dout_pin).unwrap() as u8;
+            
+            count <<= 1;
+            if ( bit_value == 1 )
+            {
+                count += 1;
+            }
+        }
+
         
         // Set gain for next reading by sending additional clock pulses
         for _ in 0..(self.gain as u8) {
@@ -152,23 +150,20 @@ impl HX711 {
             self.do_sleep();
         }
         
-        // Combine bytes based on byte format
-        let mut raw_value: u32 = ((third_byte as u32) << 16) | 
-                ((second_byte as u32) << 8) | 
-                (first_byte as u32);
-
         
         // Convert to signed value (two's complement for 24-bit)
-        if raw_value & 0x800000 != 0 {
-            raw_value |= 0xFF000000; // Sign extend
-        }
+        // if raw_value & 0x800000 != 0 {
+        //    raw_value |= 0xFF000000; // Sign extend
+        //}
+        count = count ^ 0x800000;
         
-        Some(raw_value as i32)
+        count
     }
     
     /// Get a single reading
     pub fn get_value(&mut self) -> Option<i32> {
-        self.read_raw_bytes()
+        let value = self.read_raw_bytes();
+        if value == -1 { None } else { Some(value) }
     }
     
     /// Get the average of multiple readings

@@ -5,8 +5,8 @@ mod hx711; // Assuming the driver is in hx711.rs
 use hx711::{HX711, Gain};
 
 // Your calibration constants
-const OFFSET: i32 = 8388608;  // Zero offset value
-const SCALE: f32 = 432.0;     // Scale factor (raw units per gram)
+const OFFSET: i32 = 8661777;  // Zero offset value
+const SCALE: f32 = -960.33;     // Scale factor (raw units per gram)
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Initializing HX711...");

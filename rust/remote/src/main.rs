@@ -99,17 +99,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         
         let mut wireless_quality: i16 = -1;
         let mut latency: u64 = 0;
+        let mut weight: f32 = (-1) as f32;
         
         {
             match query_mutex.lock().unwrap().as_ref() {
                 Some(query) => { 
-                    wireless_quality = query.wireless_quality; 
-                    latency = query.latency;
+                    wireless_quality = query.wireless_quality.unwrap_or(0-1);
+                    latency = query.latency.unwrap_or(0);
                     if wireless_quality > 0 && wireless_quality <= 70
                     {
                         let qual8 = (wireless_quality * 8) / 70;
                         led.display_value(qual8 as u8);
                     }
+                    weight = query.weight.unwrap_or((0-1) as f32);
                 }
                 None => { }
             }
@@ -125,6 +127,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         
             wireless_quality,
             latency,
+            weight
         };
         let _ = tx_display.try_send(display_data);
         

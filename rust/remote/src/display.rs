@@ -18,6 +18,7 @@ pub struct DisplayData {
     
     pub wireless_quality: i16,
     pub latency: u64,
+    pub weight: f32,
 }
 
 
@@ -161,6 +162,7 @@ fn get_font_data(c: char) -> [u8; 5] {
         'Y' => [0x03, 0x0C, 0x70, 0x0C, 0x03],
         'Z' => [0x61, 0x51, 0x49, 0x45, 0x43],
         ':' => [0x00, 0x36, 0x36, 0x00, 0x00],
+        '.' => [0x00, 0x60, 0x60, 0x00, 0x00],
         ' ' => [0x00, 0x00, 0x00, 0x00, 0x00],
         '-' => [0x08, 0x08, 0x08, 0x08, 0x08],
         '$' => [0x24, 0x4A, 0xFF, 0x4A, 0x32],
@@ -211,6 +213,9 @@ pub fn display_thread(rx: Receiver<DisplayData>) {
                     
                     let boom_text = format!("SAIL:{} {}", data.boom, data.genoa);
                     display_buffer.draw_text(0, 20, &boom_text);
+
+                    let weight_text = format!("WE:{}", data.weight);
+                    display_buffer.draw_text(0, 30, &weight_text);
 
                     let wifi = format!("W: {} L: {}", data.wireless_quality, data.latency);
                     display_buffer.draw_text(64, 56, &wifi);

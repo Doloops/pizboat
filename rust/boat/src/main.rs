@@ -1,7 +1,12 @@
+mod hx711;
+
+use hx711::{HX711, Gain};
+
 use anyhow::Result;
-use rust_pigpio::pigpio;
+use rust_pigpio::{initialize, pwm::servo};
 use serde::{Deserialize, Serialize};
 use std::thread;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tungstenite::{connect, Message};
 use std::fs;
@@ -14,7 +19,8 @@ struct QueryMessage {
     msg_type: String,
     timestamp: u64,
     wireless_quality: i16,
-    latency: u64
+    latency: u64,
+    weight: f32
 }
 
 #[derive(Debug, Deserialize)]
@@ -38,7 +44,7 @@ impl ServoController {
     fn new(name: &str, pin_number: u32) -> Result<Self> {
         let default_pulse_width_us = 1480;
         
-        pigpio::servo(pin_number, default_pulse_width_us)
+        servo(pin_number, default_pulse_width_us)
           .map_err(|e| anyhow::anyhow!("Servo {} error: {}", name, e))?;
 
         println!("Init servo {} to pin {}", name.to_string(), pin_number);
@@ -49,7 +55,7 @@ impl ServoController {
     fn set_servo_pulse(&mut self, pulse_width_us: u32) -> Result<()> {
         let pulse_width_us = pulse_width_us.clamp(1000, 2000);
 
-        pigpio::servo(self.pin_number, pulse_width_us)
+        servo(self.pin_number, pulse_width_us)
           .map_err(|e| anyhow::anyhow!("Servo {} error: {}", self.name, e))?;
 
         Ok(())
@@ -80,7 +86,6 @@ impl BoatController {
             self.rudder_star.set_servo_pulse(val)?;
         }
         if let Some(val) = cmd.rudder_port {
-            println!("Port: {}", val);
             self.rudder_port.set_servo_pulse(val)?;
         }
         if let Some(val) = cmd.motor {
@@ -127,7 +132,7 @@ fn get_timestamp_ms() -> u64 {
         .as_millis() as u64
 }
 
-fn handle_websocket(controller: &mut BoatController) -> Result<()> {
+fn handle_websocket(controller: &mut BoatController, weight_mutex: Arc<Mutex<Option<f32>>>) -> Result<()> {
     let (mut socket, _response) = connect(WS_URL)?;
     println!("WebSocket connected to {}", WS_URL);
 
@@ -139,22 +144,30 @@ fn handle_websocket(controller: &mut BoatController) -> Result<()> {
 
     loop {
         let timestamp = get_timestamp_ms();
-        
         let wireless_quality = get_wireless_link_quality();
+        
+        let weight = match *(weight_mutex.lock().unwrap())
+        {
+        Some(d) => { d }
+        None => { -1 as f32 }
+        };
         
         let query = QueryMessage {
             msg_type: "query".to_string(),
             timestamp,
             wireless_quality,
-            latency
+            latency,
+            weight
         };
         
         let query_json = serde_json::to_string(&query)?;
+        
+        println!("Update {query_json}");
         socket.send(Message::Text(query_json))?;
         
         match socket.read() {
             Ok(Message::Text(text)) => {
-                println!("Update {text}");
+                // println!("Update {text}");
                 match serde_json::from_str::<CommandResponse>(&text) {
                     Ok(response) => {
                         let now = get_timestamp_ms();
@@ -187,15 +200,55 @@ fn handle_websocket(controller: &mut BoatController) -> Result<()> {
     Ok(())
 }
 
-fn main() -> Result<()> {
-    pigpio::initialize()
-      .expect("Could not init pigpio !");
+// Your calibration constants
+const OFFSET: i32 = 8661777;  // Zero offset value
+const SCALE: f32 = -960.33;     // Scale factor (raw units per gram)
+
+
+fn hx711_thread(weight_mutex: Arc<Mutex<Option<f32>>>) {
+    let mut hx711 = HX711::new(5, 6, Gain::ChAGain128).expect("Could not init hx711 :");
+
+    loop {
+         match hx711.get_value() {
+            Some(raw_value) => {
+                // Calculate weight using calibration
+                let weight = (raw_value - OFFSET) as f32 / SCALE;
+                println!("Raw: {:8} | Weight: {:8.2} g", raw_value, weight);
+                
+                {
+                    let mut locked = weight_mutex.lock().unwrap();
+                    *locked = Some(weight);
+                }
+            }
+            None => {
+                println!("Error: Failed to read from sensor");
+                {
+                    let mut locked = weight_mutex.lock().unwrap();
+                    *locked = None;
+                }
+
+            }
+        }
+        thread::sleep(Duration::from_micros(20_000));
+    }
+}
+
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    initialize().expect("Could not init pigpio !");
+    
+
+    let weight_mutex: Arc<Mutex<Option<f32>>> = Arc::new(Mutex::new(None));
+    let weight_mutex_clone = Arc::clone(&weight_mutex);
+    
+    
+    thread::spawn(move || hx711_thread(weight_mutex_clone));
 
     let mut controller = BoatController::new()?;
 
     loop {
         println!("Connecting to {}", WS_URL);
-        if let Err(e) = handle_websocket(&mut controller) {
+        if let Err(e) = handle_websocket(&mut controller, Arc::clone(&weight_mutex)) {
             eprintln!("Connection error: {}", e);
             thread::sleep(Duration::from_secs(1));
         }

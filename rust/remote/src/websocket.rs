@@ -10,8 +10,9 @@ pub struct QueryMessage {
     #[serde(rename = "type")]
     msg_type: String,
     timestamp: u64,
-    pub wireless_quality: i16,
-    pub latency: u64,
+    pub wireless_quality: Option<i16>,
+    pub latency: Option<u64>,
+    pub weight: Option<f32>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

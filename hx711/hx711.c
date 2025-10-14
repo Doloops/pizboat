@@ -55,11 +55,14 @@ int main(int argc, char *argv[]) {
     bcm2835_gpio_fsel(SCK, BCM2835_GPIO_FSEL_OUTP);
     bcm2835_gpio_fsel(DOUT, BCM2835_GPIO_FSEL_INPT);
 
-    bcm2835_gpio_write(SCK, HIGH);
-    nslp();
-    bcm2835_gpio_write(SCK, LOW);
-    nslp();
-    
+    fprintf(stderr, "Loop\n");
+    for (int i = 0 ; i < 2 ; i++) {
+
+        bcm2835_gpio_write(SCK, HIGH);
+        nslp();
+        bcm2835_gpio_write(SCK, LOW);
+        nslp();
+    }
     struct timeval tv;
     gettimeofday(&tv, NULL);
     uint64_t birth = tv.tv_sec;
@@ -108,7 +111,7 @@ int main(int argc, char *argv[]) {
         val -= OFFSET;
         val /= SCALE;
         
-        usleep(200000);
+        usleep(20000);
         nbframes ++;
     
         gettimeofday(&tv, NULL);

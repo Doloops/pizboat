@@ -1,0 +1,53 @@
+{
+  "mode": "Normal",
+  "settings_path": "settings.json",
+  "channels": [
+    {
+      "name": "RudderStar",
+      "deadzone": 50,
+      "center": 1570,
+      "min": 1000,
+      "max": 2000,
+      "step": 1000,
+      "previous_value": 1570
+    },
+    {
+      "name": "RudderPort",
+      "deadzone": 50,
+      "center": 1510,
+      "min": 1000,
+      "max": 2000,
+      "step": 1000,
+      "previous_value": 1510
+    },
+    {
+      "name": "Motor",
+      "deadzone": 50,
+      "center": 1500,
+      "min": 1000,
+      "max": 2000,
+      "step": 10,
+      "previous_value": 1522
+    },
+    {
+      "name": "Boom",
+      "deadzone": 50,
+      "center": 1450,
+      "min": 1000,
+      "max": 2000,
+      "step": 100,
+      "previous_value": 1500
+    },
+    {
+      "name": "Genoa",
+      "deadzone": 50,
+      "center": 1480,
+      "min": 1000,
+      "max": 2000,
+      "step": 100,
+      "previous_value": 1500
+    }
+  ],
+  "current_channel": 4,
+  "current_value": "Center"
+}

@@ -106,12 +106,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Some(query) => { 
                     wireless_quality = query.wireless_quality.unwrap_or(0-1);
                     latency = query.latency.unwrap_or(0);
+                    /*
                     if wireless_quality > 0 && wireless_quality <= 70
                     {
                         let qual8 = (wireless_quality * 8) / 70;
                         led.display_value(qual8 as u8);
                     }
-                    weight = query.weight.unwrap_or((0-1) as f32);
+                    */
+                    weight = query.weight.unwrap_or(0 as f32);
+                    let w8 = ((weight * 8.) / 500.) as u8;
+                    led.display_value(w8);
                 }
                 None => { }
             }

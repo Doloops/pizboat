@@ -162,7 +162,7 @@ fn handle_websocket(controller: &mut BoatController, weight_mutex: Arc<Mutex<Opt
         
         let query_json = serde_json::to_string(&query)?;
         
-        println!("Update {query_json}");
+        // println!("Update {query_json}");
         socket.send(Message::Text(query_json))?;
         
         match socket.read() {
@@ -202,7 +202,7 @@ fn handle_websocket(controller: &mut BoatController, weight_mutex: Arc<Mutex<Opt
 
 // Your calibration constants
 const OFFSET: i32 = 8661777;  // Zero offset value
-const SCALE: f32 = -960.33;     // Scale factor (raw units per gram)
+const SCALE: f32 = 960.33;     // Scale factor (raw units per gram)
 
 
 fn hx711_thread(weight_mutex: Arc<Mutex<Option<f32>>>) {
@@ -213,7 +213,7 @@ fn hx711_thread(weight_mutex: Arc<Mutex<Option<f32>>>) {
             Some(raw_value) => {
                 // Calculate weight using calibration
                 let weight = (raw_value - OFFSET) as f32 / SCALE;
-                println!("Raw: {:8} | Weight: {:8.2} g", raw_value, weight);
+                // println!("Raw: {:8} | Weight: {:8.2} g", raw_value, weight);
                 
                 {
                     let mut locked = weight_mutex.lock().unwrap();

@@ -31,8 +31,8 @@ impl HX711 {
     pub fn new(dout_pin: u32, pd_sck_pin: u32, gain: Gain) -> Result<Self, Box<dyn std::error::Error>> {
         initialize().expect("Could not init pigpio !");
 
-        set_mode(pd_sck_pin, OUTPUT);
-        set_mode(dout_pin, INPUT);
+        set_mode(pd_sck_pin, OUTPUT)?;
+        set_mode(dout_pin, INPUT)?;
         
         write(pd_sck_pin, OFF).unwrap();
         // let mut pd_sck = gpio.get(pd_sck_pin)?.into_output();

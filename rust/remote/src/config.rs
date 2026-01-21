@@ -119,6 +119,7 @@ impl Settings {
         channels.push(ChannelConfig::new("Motor"));
         channels.push(ChannelConfig::new("Boom"));
         channels.push(ChannelConfig::new("Genoa"));
+        channels.push(ChannelConfig::new("Misc"));
         
         Settings{mode: ControlMode::Normal, settings_path: settings_path.to_string(), channels: channels, current_channel: 0, current_value: SettingsValue::Deadzone}
     }

@@ -17,8 +17,13 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-const BUTTON_PINS: [u8; 6] = [12, 25, 24, 23, 18, 15];
+use rppal::gpio::Gpio;
+
+const BUTTON_PINS: [u8; 6] = [0, 25, 24, 23, 18, 15];
 const LED_PINS: [u8; 8] = [16, 20, 21, 26, 19, 13, 6, 5];
+
+const MISC_PIN: u8 = 12;
+const MISC_ADC: usize = 2;
 
 const ADC_CHANNELS: usize = 8;
 // const DISPLAY_CHANNELS: [usize; 5] = [0, 1, 2, 6, 7];
@@ -39,6 +44,12 @@ const BUTTON_BOOM_UP:    usize = 0;
 const BUTTON_BOOM_DOWN:  usize = 3;
 const BUTTON_GENOA_UP:   usize = 1;
 const BUTTON_GENOA_DOWN: usize = 4;
+
+const PERIOD_MS: u64 = 20;
+const PULSE_MIN_US: u64 = 1200;
+const PULSE_NEUTRAL_US: u64 = 1500;
+const PULSE_MAX_US: u64 = 1800;
+
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Starting RC Boat Controller with WebSocket");
@@ -76,6 +87,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    
+    let mut misc_pwm = Gpio::new()?.get(MISC_PIN)?.into_output();
+    
+
     settings.save()?;
 
     loop {
@@ -89,6 +104,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let rudder_star = settings.channels[0].transform_adc(adc_values[6]);
         let rudder_port = settings.channels[1].transform_adc(adc_values[6]);
         let motor_value = settings.channels[2].transform_adc(adc_values[7]);
+        
+        // println!("adc 0 {} 1 {} 2 {} 6 {} 7 {}", adc_values[0], adc_values[1], adc_values[2], adc_values[6], adc_values[7]);
 
         let button_states = if previous_mode == ControlMode::Normal { button_reader.get_current_states() } else { zero_buttons.clone() };
         
@@ -97,6 +114,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let boom = settings.channels[3].apply_button(button_states[BUTTON_BOOM_UP], button_states[BUTTON_BOOM_DOWN], adc_values[1]);
         let genoa = settings.channels[4].apply_button(button_states[BUTTON_GENOA_UP], button_states[BUTTON_GENOA_DOWN], adc_values[0]);
         
+        let misc = settings.channels[5].transform_adc(adc_values[MISC_ADC]);
+        
+        let misc_width_us = misc.clamp(1000, 2000);
+
+        println!("Servo at PIN {} sending {} (from {})", MISC_PIN, misc_width_us, adc_values[MISC_ADC]);
+
+        misc_pwm.set_pwm(
+            Duration::from_millis(PERIOD_MS),
+            Duration::from_micros(misc_width_us.into()),
+        )?;
+       
         let mut wireless_quality: i16 = -1;
         let mut latency: u64 = 0;
         let mut weight: f32 = (-1) as f32;

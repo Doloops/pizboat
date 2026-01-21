@@ -68,6 +68,23 @@ impl DisplayBuffer {
             self.draw_char(x + (i as u8 * 6), y, c);
         }
     }
+    
+    fn draw_rectangle(&mut self, x: u8, y: u8, w: u8, h: u8) {
+        for dx in x..(x+w) {
+            for dy in y..(y+h) {
+                self.set_pixel(dx, dy, true);
+            }
+        }
+        
+    }
+    
+    fn draw_blocks(&mut self, x0: u8, y0: u8, nb_blocks: u8) {
+        let mut x = x0;
+        for n in 0..nb_blocks {
+            self.draw_rectangle(x, y0, 3, 8);
+            x += 6;
+        }
+    }
 }
 
 pub struct SSD1306 {
@@ -214,14 +231,16 @@ pub fn display_thread(rx: Receiver<DisplayData>) {
                     let boom_text = format!("SAIL:{} {}", data.boom, data.genoa);
                     display_buffer.draw_text(0, 20, &boom_text);
 
-                    let weight_text = format!("WE:{}", data.weight);
+                    let weight_text = format!("WE:{:04}", data.weight as u32);
                     display_buffer.draw_text(0, 30, &weight_text);
 
-                    let wifi = format!("W: {} L: {}", data.wireless_quality, data.latency);
-                    display_buffer.draw_text(64, 56, &wifi);
+                    display_buffer.draw_blocks(2, 56, ((data.wireless_quality * 12) / 70) as u8);
+
+                    let wifi = format!("L: {}", data.latency);
+                    display_buffer.draw_text(80, 56, &wifi);
                     
-                    let extra = "* &".to_string();
-                    display_buffer.draw_text(0, 56, &extra);
+                    // let extra = "* &".to_string();
+                    // display_buffer.draw_text(0, 56, &extra);
                 }
                 ControlMode::Settings => {
                     display_buffer.draw_text(0, 0, &mode_settings);

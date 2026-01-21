@@ -42,7 +42,7 @@ struct ServoController {
 
 impl ServoController {
     fn new(name: &str, pin_number: u32) -> Result<Self> {
-        let default_pulse_width_us = 1480;
+        let default_pulse_width_us = 1450;
         
         servo(pin_number, default_pulse_width_us)
           .map_err(|e| anyhow::anyhow!("Servo {} error: {}", name, e))?;

@@ -15,15 +15,21 @@ use octled::OctLed;
 use std::sync::mpsc::{self, SyncSender, Receiver};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use rppal::gpio::Gpio;
+// use rppal::gpio::Gpio;
 
-const BUTTON_PINS: [u8; 6] = [0, 25, 24, 23, 18, 15];
-const LED_PINS: [u8; 8] = [16, 20, 21, 26, 19, 13, 6, 5];
+extern crate rust_pigpio;
 
-const MISC_PIN: u8 = 12;
-const MISC_ADC: usize = 2;
+const BUTTON_PINS: [u8; 6] = [0, 25, 24, 23, 16, 15];
+// const LED_PINS: [u8; 8] = [16, 20, 21, 26, 19, 13, 6, 5];
+
+const RUDDER_ADC: usize = 6;
+const MOTOR_ADC: usize = 7;
+
+// const MISC_PINS: [u8; 4] = [12, 13, 19, 18];
+const MISC_PINS: [u8; 1] = [12];
+const MISC_ADC: [usize; 4] = [2, RUDDER_ADC, MOTOR_ADC, 3];
 
 const ADC_CHANNELS: usize = 8;
 // const DISPLAY_CHANNELS: [usize; 5] = [0, 1, 2, 6, 7];
@@ -45,21 +51,22 @@ const BUTTON_BOOM_DOWN:  usize = 3;
 const BUTTON_GENOA_UP:   usize = 1;
 const BUTTON_GENOA_DOWN: usize = 4;
 
-const PERIOD_MS: u64 = 20;
-const PULSE_MIN_US: u64 = 1200;
-const PULSE_NEUTRAL_US: u64 = 1500;
-const PULSE_MAX_US: u64 = 1800;
+const PERIOD_MS: u64 = 10;
+
+const SWEEP_HZ: f64 = 0.5;
 
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let start = Instant::now();
+
     println!("Starting RC Boat Controller with WebSocket");
 
     let mut button_reader = ButtonReader::new(&BUTTON_PINS)?;
     let mut adc_reader = AdcReader::new()?;
     
-    let mut led = OctLed::new(&LED_PINS)?;
+    // let mut led = OctLed::new(&LED_PINS)?;
     
-    led.k2000();
+    // led.k2000();
     
     let (tx_display, rx_display): (SyncSender<DisplayData>, Receiver<DisplayData>) = mpsc::sync_channel(1);
     
@@ -87,9 +94,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // let gpio = Gpio::new()?;
     
-    let mut misc_pwm = Gpio::new()?.get(MISC_PIN)?.into_output();
+    println!("Initialized pigpio. Version: {}", rust_pigpio::initialize().unwrap());
     
+    // let mut misc_pwm = Gpio::new()?.get(MISC_PIN)?.into_output();
+    
+    let mut misc_pwms = MISC_PINS.map(|pin| {
+        rust_pigpio::set_mode(pin as u32, rust_pigpio::OUTPUT).unwrap();
+        
+        rust_pigpio::pwm::set_pwm_frequency(pin as u32, 500).unwrap(); // Set to modulate at 500hz.
+        let _ = rust_pigpio::pwm::set_pwm_range(pin as u32, 3000).unwrap(); // Set range to 1000. 1 range = 2 us;
+
+        /*
+        gpio.get(pin)
+            .unwrap_or_else(|e| panic!("MISC pin {pin}: {e}"))
+            .into_output()
+            */
+    });
 
     settings.save()?;
 
@@ -101,9 +123,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let adc_values = adc_reader.read_all_channels()?;
 
         // Transform ADC values (rudder on channel 0, motor on channel 1)
-        let rudder_star = settings.channels[0].transform_adc(adc_values[6]);
-        let rudder_port = settings.channels[1].transform_adc(adc_values[6]);
-        let motor_value = settings.channels[2].transform_adc(adc_values[7]);
+        let rudder_star = settings.channels[0].transform_adc(adc_values[RUDDER_ADC]);
+        let rudder_port = settings.channels[1].transform_adc(adc_values[RUDDER_ADC]);
+        let motor_value = settings.channels[2].transform_adc(adc_values[MOTOR_ADC]);
         
         // println!("adc 0 {} 1 {} 2 {} 6 {} 7 {}", adc_values[0], adc_values[1], adc_values[2], adc_values[6], adc_values[7]);
 
@@ -114,16 +136,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let boom = settings.channels[3].apply_button(button_states[BUTTON_BOOM_UP], button_states[BUTTON_BOOM_DOWN], adc_values[1]);
         let genoa = settings.channels[4].apply_button(button_states[BUTTON_GENOA_UP], button_states[BUTTON_GENOA_DOWN], adc_values[0]);
         
-        let misc = settings.channels[5].transform_adc(adc_values[MISC_ADC]);
+        print!("Servos ");
         
-        let misc_width_us = misc.clamp(1000, 2000);
-
-        println!("Servo at PIN {} sending {} (from {})", MISC_PIN, misc_width_us, adc_values[MISC_ADC]);
-
-        misc_pwm.set_pwm(
-            Duration::from_millis(PERIOD_MS),
-            Duration::from_micros(misc_width_us.into()),
-        )?;
+        for misc in 0..misc_pwms.len() {
+            let misc_pin = MISC_PINS[misc];
+            let misc_adc = MISC_ADC[misc];
+            let misc_adc_value = adc_values[misc_adc];
+            // let misc_value = misc_adc_value * 3; // settings.channels[5].transform_adc(misc_adc_value);
+            
+            let t = start.elapsed().as_secs_f64();
+            let sweep = (1550.0 + 300.0 * (std::f64::consts::TAU * SWEEP_HZ * t).sin());
+            let misc_value = sweep as u16;
+            // let misc_value = 1500.0 as u16;
+            
+            let misc_width_us = misc_value.clamp(100, 3000);
+            print!("| {} => {} => {} ", misc_pin, misc_adc_value, misc_value);
+            
+            /*
+            misc_pwms[misc].set_pwm(
+                Duration::from_millis(PERIOD_MS),
+                Duration::from_micros(misc_width_us.into()),
+            )?;
+            */
+            
+            rust_pigpio::pwm::pwm(misc_pin as u32, misc_value.into());
+        }
+        println!(".");
+        
        
         let mut wireless_quality: i16 = -1;
         let mut latency: u64 = 0;
@@ -143,7 +182,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     */
                     weight = query.weight.unwrap_or(0 as f32);
                     let w8 = ((weight * 8.) / 500.) as u8;
-                    led.display_value(w8);
+                    // led.display_value(w8);
                 }
                 None => { }
             }

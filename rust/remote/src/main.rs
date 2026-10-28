@@ -18,20 +18,15 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-// use rppal::gpio::Gpio;
-
 const BUTTON_PINS: [u8; 6] = [0, 25, 24, 23, 16, 15];
-// const LED_PINS: [u8; 8] = [16, 20, 21, 26, 19, 13, 6, 5];
 
 const RUDDER_ADC: usize = 6;
 const MOTOR_ADC: usize = 7;
 
-// const MISC_PINS: [u8; 4] = [12, 13, 19, 18];
 const MISC_PINS: [u8; 2] = [12, 13];
 const MISC_ADC: [usize; 4] = [2, 0, RUDDER_ADC, MOTOR_ADC];
 
 const ADC_CHANNELS: usize = 8;
-// const DISPLAY_CHANNELS: [usize; 5] = [0, 1, 2, 6, 7];
 
 fn handle_buttons_for_settings(settings: &mut Settings, button_reader: &mut ButtonReader) {
     let edges = button_reader.read_and_detect_edges();
@@ -128,7 +123,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let rudder_port = settings.channels[1].transform_adc(adc_values[RUDDER_ADC]);
         let motor_value = settings.channels[2].transform_adc(adc_values[MOTOR_ADC]);
         
-        println!("adc 0 {} 1 {} 2 {} 6 {} 7 {}", adc_values[0], adc_values[1], adc_values[2], adc_values[6], adc_values[7]);
+        print!("ADC 0 {} 1 {} 2 {} 5 {} 6 {} 7 {} ", adc_values[0], adc_values[1], adc_values[2], adc_values[5], adc_values[6], adc_values[7]);
 
         let button_states = if previous_mode == ControlMode::Normal { button_reader.get_current_states() } else { zero_buttons.clone() };
         
@@ -137,7 +132,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let boom = settings.channels[3].apply_button(button_states[BUTTON_BOOM_UP], button_states[BUTTON_BOOM_DOWN], adc_values[1]);
         let genoa = settings.channels[4].apply_button(button_states[BUTTON_GENOA_UP], button_states[BUTTON_GENOA_DOWN], adc_values[0]);
         
-        print!("Servos ");
+        print!("| Servos ");
         
         for misc in 0..misc_pwms.len() {
             let misc_pin = MISC_PINS[misc];
@@ -152,13 +147,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             
             let misc_width_us = misc_value.clamp(0, 3000);
             print!("| {} => {} => {} => {}ms", misc_pin, misc_adc_value, misc_value, misc_width_us);
-            
-            /*
-            misc_pwms[misc].set_pwm(
-                Duration::from_millis(PERIOD_MS),
-                Duration::from_micros(misc_width_us.into()),
-            )?;
-            */
             
             pig.pwm(misc_pin as u32, misc_width_us.into())?;
         }

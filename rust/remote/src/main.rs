@@ -4,6 +4,7 @@ mod adc;
 mod buttons;
 mod websocket;
 mod octled;
+mod pigpiod;
 
 use websocket::{websocket_thread, CommandMessage, QueryMessage};
 use config::{Settings, ControlMode};
@@ -19,8 +20,6 @@ use std::time::{Duration, Instant};
 
 // use rppal::gpio::Gpio;
 
-extern crate rust_pigpio;
-
 const BUTTON_PINS: [u8; 6] = [0, 25, 24, 23, 16, 15];
 // const LED_PINS: [u8; 8] = [16, 20, 21, 26, 19, 13, 6, 5];
 
@@ -28,8 +27,8 @@ const RUDDER_ADC: usize = 6;
 const MOTOR_ADC: usize = 7;
 
 // const MISC_PINS: [u8; 4] = [12, 13, 19, 18];
-const MISC_PINS: [u8; 1] = [12];
-const MISC_ADC: [usize; 4] = [2, RUDDER_ADC, MOTOR_ADC, 3];
+const MISC_PINS: [u8; 2] = [12, 13];
+const MISC_ADC: [usize; 4] = [2, 0, RUDDER_ADC, MOTOR_ADC];
 
 const ADC_CHANNELS: usize = 8;
 // const DISPLAY_CHANNELS: [usize; 5] = [0, 1, 2, 6, 7];
@@ -96,15 +95,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // let gpio = Gpio::new()?;
     
-    println!("Initialized pigpio. Version: {}", rust_pigpio::initialize().unwrap());
+    let mut pig = pigpiod::Pigpiod::connect("localhost:8888")?;
+    println!("Connected to pigpiod. Version: {}", pig.version()?);
     
     // let mut misc_pwm = Gpio::new()?.get(MISC_PIN)?.into_output();
     
     let mut misc_pwms = MISC_PINS.map(|pin| {
-        rust_pigpio::set_mode(pin as u32, rust_pigpio::OUTPUT).unwrap();
-        
-        rust_pigpio::pwm::set_pwm_frequency(pin as u32, 500).unwrap(); // Set to modulate at 500hz.
-        let _ = rust_pigpio::pwm::set_pwm_range(pin as u32, 3000).unwrap(); // Set range to 1000. 1 range = 2 us;
+        pig.set_mode(pin as u32, pigpiod::OUTPUT).unwrap();
+
+        pig.set_pwm_frequency(pin as u32, 500).unwrap(); // Set to modulate at 500hz.
+        let real_range = pig.set_pwm_range(pin as u32, 3000).unwrap(); // Set range to 1000. 1 range = 2 us;
+        println!("PWM pin {} real range {}", pin, real_range);
 
         /*
         gpio.get(pin)
@@ -127,7 +128,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let rudder_port = settings.channels[1].transform_adc(adc_values[RUDDER_ADC]);
         let motor_value = settings.channels[2].transform_adc(adc_values[MOTOR_ADC]);
         
-        // println!("adc 0 {} 1 {} 2 {} 6 {} 7 {}", adc_values[0], adc_values[1], adc_values[2], adc_values[6], adc_values[7]);
+        println!("adc 0 {} 1 {} 2 {} 6 {} 7 {}", adc_values[0], adc_values[1], adc_values[2], adc_values[6], adc_values[7]);
 
         let button_states = if previous_mode == ControlMode::Normal { button_reader.get_current_states() } else { zero_buttons.clone() };
         
@@ -142,15 +143,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let misc_pin = MISC_PINS[misc];
             let misc_adc = MISC_ADC[misc];
             let misc_adc_value = adc_values[misc_adc];
-            // let misc_value = misc_adc_value * 3; // settings.channels[5].transform_adc(misc_adc_value);
+            let misc_value = misc_adc_value * 3; // settings.channels[5].transform_adc(misc_adc_value);
             
-            let t = start.elapsed().as_secs_f64();
-            let sweep = (1550.0 + 300.0 * (std::f64::consts::TAU * SWEEP_HZ * t).sin());
-            let misc_value = sweep as u16;
+            // let t = start.elapsed().as_secs_f64();
+            // let sweep = (1550.0 + 300.0 * (std::f64::consts::TAU * SWEEP_HZ * t).sin());
+            // let misc_value = sweep as u16;
             // let misc_value = 1500.0 as u16;
             
-            let misc_width_us = misc_value.clamp(100, 3000);
-            print!("| {} => {} => {} ", misc_pin, misc_adc_value, misc_value);
+            let misc_width_us = misc_value.clamp(0, 4000);
+            print!("| {} => {} => {} => {}ms", misc_pin, misc_adc_value, misc_value, misc_width_us);
             
             /*
             misc_pwms[misc].set_pwm(
@@ -159,7 +160,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             )?;
             */
             
-            rust_pigpio::pwm::pwm(misc_pin as u32, misc_value.into());
+            pig.pwm(misc_pin as u32, misc_value.into())?;
         }
         println!(".");
         

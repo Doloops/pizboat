@@ -150,7 +150,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // let misc_value = sweep as u16;
             // let misc_value = 1500.0 as u16;
             
-            let misc_width_us = misc_value.clamp(0, 4000);
+            let misc_width_us = misc_value.clamp(0, 3000);
             print!("| {} => {} => {} => {}ms", misc_pin, misc_adc_value, misc_value, misc_width_us);
             
             /*
@@ -160,7 +160,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             )?;
             */
             
-            pig.pwm(misc_pin as u32, misc_value.into())?;
+            pig.pwm(misc_pin as u32, misc_width_us.into())?;
         }
         println!(".");
         

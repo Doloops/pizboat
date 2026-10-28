@@ -16,6 +16,12 @@ const CMD_PIGPV: u32 = 26;
 pub const INPUT: u32 = 0;
 pub const OUTPUT: u32 = 1;
 
+// True when pigpiod answered but refused the command (bad gpio, dutycycle out of range...),
+// as opposed to the connection being lost.
+fn is_rejected(e: &io::Error) -> bool {
+    e.kind() == io::ErrorKind::InvalidInput
+}
+
 pub struct Pigpiod {
     stream: TcpStream,
 }
@@ -28,6 +34,8 @@ impl Pigpiod {
     }
 
     // Sends one command and returns its result; negative results are pigpio error codes (see pigpio.h).
+    // A command rejected by pigpiod comes back as ErrorKind::InvalidInput, see is_rejected();
+    // any other error kind means the socket itself failed.
     fn command(&mut self, cmd: u32, p1: u32, p2: u32) -> io::Result<u32> {
         let mut buf = [0u8; 16];
         for (i, v) in [cmd, p1, p2, 0].iter().enumerate() {
@@ -38,7 +46,7 @@ impl Pigpiod {
 
         let res = i32::from_le_bytes([buf[12], buf[13], buf[14], buf[15]]);
         if res < 0 && cmd != CMD_PIGPV {
-            return Err(io::Error::other(format!("pigpiod command {} ({}, {}) failed with error {}", cmd, p1, p2, res)));
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, format!("pigpiod command {} ({}, {}) failed with error {}", cmd, p1, p2, res)));
         }
         Ok(res as u32)
     }
@@ -65,8 +73,16 @@ impl Pigpiod {
         self.command(CMD_PRS, gpio, range)
     }
 
+    // A dutycycle rejected by pigpiod is only logged, the gpio keeps its previous value;
+    // only a socket failure is returned.
     pub fn pwm(&mut self, gpio: u32, dutycycle: u32) -> io::Result<()> {
-        self.command(CMD_PWM, gpio, dutycycle).map(|_| ())
+        match self.command(CMD_PWM, gpio, dutycycle) {
+            Err(e) if is_rejected(&e) => {
+                eprintln!("{}", e);
+                Ok(())
+            }
+            other => other.map(|_| ()),
+        }
     }
 
     // Servo pulses at 50Hz, pulsewidth in us (500..2500), 0 switches the pulses off.
